@@ -20,25 +20,15 @@ class LearningHyperParameter(str, Enum):
     MIN_DURATION = "min_duration"
     MAX_DURATION = "max_duration"
     LATENT_DIM = "latent_dim"
-    HIDDEN1_MLP = "hidden1_mlp"
-    HIDDEN2_MLP = "hidden2_mlp"
-    HIDDEN3_MLP = "hidden3_mlp"
-    HIDDEN4_MLP = "hidden4_mlp"
-    HIDDEN1_CHANNELS_CNN = "hidden1_channels_cnn"
-    HIDDEN2_CHANNELS_CNN = "hidden2_channels_cnn"
-    HIDDEN3_CHANNELS_CNN = "hidden3_channels_cnn"
-    HIDDEN4_CHANNELS_CNN = "hidden4_channels_cnn"
-    HIDDEN5_CHANNELS_CNN = "hidden5_channels_cnn"
-    KERNEL1_SIZE = "kernel1_size"
-    KERNEL2_SIZE = "kernel2_size"
-    KERNEL3_SIZE = "kernel3_size"
-    KERNEL4_SIZE = "kernel4_size"
-    KERNEL5_SIZE = "kernel5_size"
-    STRIDE = "stride"
-    PADDING = "padding"
-    AUDIO_SRCS = "audio_srcs"
-    IS_ONED = "is_oned"
-    IS_TRAINING = "is_training"
+    HIDDEN_MLP = "hidden_mlp"
+    HIDDEN_CHANNELS = "hidden_channels"
+    KERNEL_SIZES = "kernel_sizes"
+    STRIDES = "strides"
+    DILATIONS = "dilations"
+    PADDINGS = "paddings"
+    CODEBOOK_LENGTH = "codebook_length"
+    LSTM_LAYERS = "lstm_layers"
+    COMMITMENT_COST = "commitment_cost"
 
 class Optimizers(Enum):
     ADAM = "Adam"
@@ -47,6 +37,7 @@ class Optimizers(Enum):
 
 class Models(str, Enum):
     VAE = "VAE"
+    VQVAE = "VQVAE"
 
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
