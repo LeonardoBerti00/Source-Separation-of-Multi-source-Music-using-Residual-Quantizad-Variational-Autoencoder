@@ -27,7 +27,7 @@ class Configuration:
 
         self.EARLY_STOPPING_METRIC = None
 
-        self.IS_ONED = False
+        self.IS_ONED = True
         self.IS_TRAINING = True
 
         self.HYPER_PARAMETERS = {hp: None for hp in LearningHyperParameter}

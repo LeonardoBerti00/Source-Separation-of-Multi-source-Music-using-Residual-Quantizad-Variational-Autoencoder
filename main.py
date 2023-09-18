@@ -34,7 +34,7 @@ def run():
 
     else:
         trainer = L.Trainer(
-            accelerator="gpu",
+            accelerator="cpu",
             precision="32",
             max_epochs=config.HYPER_PARAMETERS[cst.LearningHyperParameter.EPOCHS],
             profiler="advanced",
