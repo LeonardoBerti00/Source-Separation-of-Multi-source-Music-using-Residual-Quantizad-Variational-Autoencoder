@@ -1,0 +1,7 @@
+1. Complete integration wandb
+2. implementing evaluation with SI-SNR
+3. Sweep VAE
+4. Sweep VQ-VAE
+5. Try encoder and decoder of EncodeLM
+6. Implementing RQ-VAE
+7. Read Harmonic
