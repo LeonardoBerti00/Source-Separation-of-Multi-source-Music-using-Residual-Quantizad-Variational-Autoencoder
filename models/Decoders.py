@@ -176,34 +176,3 @@ class Decoder_CNN1D(nn.Module):
         return x
 
 
-class Decoder_MLP(nn.Module):
-    def __init__(self, input_size: int, audio_srcs: int, hidden_dims: list):
-        super().__init__()
-        """
-        This is a multilayer perceptron (MLP) used as encoder and decoder.
-
-        Parameters:
-        - input_size: int, the size of the input dimension
-        - audio_srcs: int, the number of channels in the input
-        - hidden_dims: list, the list of the hidden dimensions
-        """
-        modules = []
-        for i in range(1, len(hidden_dims)+1):
-            if i == len(hidden_dims):
-                modules.append(nn.Sequential(
-                    nn.Linear(hidden_dims[-i], input_size * audio_srcs),
-                    nn.LeakyReLU(True)
-                ))
-            else:
-                modules.append(nn.Sequential(
-                    nn.Linear(hidden_dims[-i], hidden_dims[-i-1]),
-                    nn.LeakyReLU(True)
-                ))
-
-        self.fcs = nn.Sequential(*modules)
-        self.audio_srcs = audio_srcs
-
-    def forward(self, x):
-        x = self.fcs(x)
-        x = rearrange(x, 'b (d c) -> b c d', c=self.audio_srcs)
-        return x

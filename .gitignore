@@ -1,5 +1,6 @@
 lightning_logs
-Slakh
-train
-validation
-test
+data/Slakh
+data/train
+data/validation
+data/test
+/wandb/

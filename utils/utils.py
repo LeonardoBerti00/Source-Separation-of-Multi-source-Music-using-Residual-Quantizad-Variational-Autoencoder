@@ -2,6 +2,7 @@ import av
 import numpy as np
 
 
+
 def compute_output_dim_conv(input_dim, kernel_size, padding, dilation, stride):
     return ((input_dim + 2 * padding - dilation * (kernel_size - 1) - 1) // stride + 1)
 

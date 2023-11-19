@@ -16,7 +16,7 @@ class Encoder_CNN2D(nn.Module):
                  ):
         super().__init__()
         """
-        This is a convolutional neural network (CNN) used as encoder and decoder.
+        This is a convolutional neural network (CNN) used as encoder.
 
         Parameters:
         - input_size: int, the size of the input dimension
@@ -129,36 +129,4 @@ class Encoder_CNN1D(nn.Module):
         return x
 
 
-class Encoder_MLP(nn.Module):
-    def __init__(self, input_size: int, audio_srcs: int, hidden_dims: list):
-        super().__init__()
-        """
-        This is a multilayer perceptron (MLP) used as encoder and decoder.
 
-        Parameters:
-        - input_size: int, the size of the input dimension
-        - audio_srcs: int, the number of channels in the input
-        - hidden_dims: list, the list of the hidden dimensions
-        """
-        modules = []
-        for i in range(len(hidden_dims)):
-            assert hidden_dims[i] > 0, f"hidden{i + 1} must be a positive integer"
-            if i == 0:
-                modules.append(nn.Sequential(
-                    nn.Linear(input_size * audio_srcs, hidden_dims[i]),
-                    nn.LeakyReLU(0.1, True)
-                ))
-            else:
-                modules.append(nn.Sequential(
-                    nn.Linear(hidden_dims[i-1], hidden_dims[i]),
-                    nn.LeakyReLU(0.1, True)
-                ))
-
-        self.fcs = nn.Sequential(*modules)
-
-
-    def forward(self, x):
-        # first we flatten the input, so that we can feed it to the linear layers, then we pass it through the linear layers
-        x = rearrange(x, 'b d c -> b (d c)')
-        x = self.fcs(x)
-        return x

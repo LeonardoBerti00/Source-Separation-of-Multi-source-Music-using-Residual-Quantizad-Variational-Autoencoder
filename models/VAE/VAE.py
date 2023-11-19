@@ -3,14 +3,13 @@ from einops import rearrange
 import lightning as L
 from repo.constants import LearningHyperParameter
 from torch import nn
-from torch.nn import functional as F
+from models.Encoders import Encoder_CNN2D, Encoder_CNN1D, Encoder_MLP
+from models.Decoders import Decoder_CNN2D, Decoder_CNN1D, Decoder_MLP
 from torchmetrics.audio import ScaleInvariantSignalNoiseRatio
-from models.Encoders import Encoder_CNN2D, Encoder_CNN1D
-from models.Decoders import Decoder_CNN2D, Decoder_CNN1D
-from utils import compute_output_dim_convtranspose, compute_output_dim_conv
+from utils import compute_output_dim_conv, compute_output_dim_convtranspose
 
 
-class VQVAE_CNN(L.LightningModule):
+class VAE(L.LightningModule):
     def __init__(self, config):
         super().__init__()
         """
@@ -26,21 +25,17 @@ class VQVAE_CNN(L.LightningModule):
         - kernel_size: int, the size of the kernel
         - latent_dim: int, the size of the latent dimension
         """
-
-        self.codebook_length = config.HYPER_PARAMETERS[LearningHyperParameter.CODEBOOK_LENGTH]
         self.latent_dim = config.HYPER_PARAMETERS[LearningHyperParameter.LATENT_DIM]
         self.audio_srcs = config.AUDIO_SRCS
         self.lr = config.HYPER_PARAMETERS[LearningHyperParameter.LEARNING_RATE]
         self.optimizer = config.HYPER_PARAMETERS[LearningHyperParameter.OPTIMIZER]
         self.momentum = config.HYPER_PARAMETERS[LearningHyperParameter.MOMENTUM]
         self.training = config.IS_TRAINING
-        self.codebook = nn.Parameter(torch.Tensor(self.codebook_length, self.latent_dim))
-        torch.nn.init.uniform_(self.codebook, -1 / self.codebook_length, 1 / self.codebook_length)
         self.batch_size = config.HYPER_PARAMETERS[LearningHyperParameter.BATCH_SIZE]
-        self.commitment_cost = config.HYPER_PARAMETERS[LearningHyperParameter.COMMITMENT_COST]
         self.train_losses = []
         self.val_losses = []
         self.test_losses = []
+        self.train_snr = []
         self.val_snr = []
         self.test_snr = []
         self.si_snr = ScaleInvariantSignalNoiseRatio()
@@ -50,6 +45,7 @@ class VQVAE_CNN(L.LightningModule):
         strides = config.HYPER_PARAMETERS[LearningHyperParameter.STRIDES]
         init_sample_len = config.HYPER_PARAMETERS[LearningHyperParameter.SAMPLE_LENGTH]
         kernel_sizes = config.HYPER_PARAMETERS[LearningHyperParameter.KERNEL_SIZES]
+
         for i in range(len(kernel_sizes)):
             if i == 0:
                 emb_sample_len = compute_output_dim_conv(input_dim=init_sample_len,
@@ -63,7 +59,8 @@ class VQVAE_CNN(L.LightningModule):
                                                     padding=paddings[i][1],
                                                     dilation=dilations[i][1],
                                                     stride=strides[i][1])
-            #print(emb_sample_len)
+
+
         if config.IS_ONED:
             self.encoder = Encoder_CNN1D(
                 input_size=config.HYPER_PARAMETERS[LearningHyperParameter.SAMPLE_LENGTH],
@@ -113,76 +110,76 @@ class VQVAE_CNN(L.LightningModule):
             )
 
 
+        self.fc_mu = nn.Linear(in_features=self.latent_dim*emb_sample_len,
+                               out_features=self.latent_dim)
+        self.fc_log_var = nn.Linear(in_features=self.latent_dim*emb_sample_len,
+                                    out_features=self.latent_dim)
+
+        self.fc = nn.Linear(in_features=self.latent_dim, out_features=self.latent_dim*emb_sample_len)
 
     def forward(self, x):
 
         x = self.encoder(x)
-        z_e = rearrange(x, 'b w c -> (b w) c')
-        z_q = self.vector_quantization(z_e)
+        x = rearrange(x, 'b c t -> b (c t)')
+        mean = self.fc_mu(x)
+        log_var = self.fc_log_var(x)
+        if self.training:
+            var = torch.exp(0.5 * log_var)
+            #print(torch.mean(var))
+            #print(torch.mean(mean))
+            normal_distribution = torch.distributions.Normal(loc=mean, scale=var)
+            sampling = normal_distribution.rsample()    # rsample implements the reparametrization trick
 
-        # Commitment loss is the mse between the quantized latent vector and the encoder output
-        q_latent_loss = F.mse_loss(z_e.detach(), z_q)
-        e_latent_loss = F.mse_loss(z_e, z_q.detach())
-        commitment_loss = q_latent_loss + self.commitment_cost * e_latent_loss
+        else:
+            sampling = mean
 
-        # From decoder to encoder
-        z_q = z_e + (z_q - z_e).detach()
-        z_q = rearrange(z_q, '(b l) c -> b l c', b=x.shape[0])
-        recon = self.decoder(z_q)
-
+        sampling = self.fc(sampling)
+        sampling = rearrange(sampling, 'b (c w) -> b c w', c=self.latent_dim)
+        recon = self.decoder(sampling)
         if not self.IS_ONED:
             # reshaping as the original input
             recon = rearrange(recon, 'b 1 h w -> b h w')
-        return recon, commitment_loss
+        return recon, mean, log_var
 
 
-    def vector_quantization(self, z_e):
+    def loss(self, input, recon, mean, log_var):
+        # Reconstruction loss is the mse between the input and the reconstruction
+        recon_term = torch.sqrt(torch.mean(torch.sum((input - recon) ** 2, dim=1)))
 
-        dist = torch.cdist(z_e, self.codebook)
-        _, encoding_indices = torch.min(dist, dim=1)
-        encodings = F.one_hot(encoding_indices, self.codebook_length).float()
-        z_q = torch.matmul(encodings, self.codebook.data)
+        # as second option of reconstruction loss, we can use the binary cross entropy loss, but in this case is better
+        # to use the mse because the input is not binary, neither discrete but continuous
+        #recon_term = F.binary_cross_entropy(recon, x, reduction='sum')
 
-        return z_q
+        # KL divergence is the difference between the distribution of the latent space and a normal distribution
+        kl_divergence = torch.sqrt(-0.5 * torch.mean(torch.sum(1 + log_var - mean ** 2 - torch.exp(log_var), dim=1)))
+
+        return recon_term + kl_divergence
+
+
 
     def training_step(self, x, batch_idx):
-        recon, commitment_loss = self.forward(x)
-        loss = self.loss(x, recon, commitment_loss)
-        self.log('train_loss', loss)
+        recon, mean, log_var = self.forward(x)
+        loss = self.loss(x, recon, mean, log_var)
         self.train_losses.append(loss)
+        self.log('train_loss', loss)
+        self.train_snr.append(self.si_snr(x, recon))
         return loss
 
     def validation_step(self, x, batch_idx):
-        recon, commitment_loss = self.forward(x)
-        loss = self.loss(x, recon, commitment_loss)
+        recon, mean, log_var = self.forward(x)
+        loss = self.loss(x, recon, mean, log_var)
         self.log('val_loss', loss)
         self.val_losses.append(loss)
         self.val_snr.append(self.si_snr(x, recon))
         return loss
 
     def test_step(self, x, batch_idx):
-        recon, commitment_loss = self.forward(x)
-        loss = self.loss(x, recon, commitment_loss)
+        recon, mean, log_var = self.forward(x)
+        loss = self.loss(x, recon, mean, log_var)
         self.log('test_loss', loss)
         self.test_losses.append(loss)
         self.test_snr.append(self.si_snr(x, recon))
         return loss
-
-    def configure_optimizers(self):
-        if self.optimizer == 'Adam':
-            self.optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
-        elif self.optimizer == 'RMSprop':
-            self.optimizer = torch.optim.RMSprop(self.parameters(), lr=self.lr)
-        elif self.optimizer == 'SGD':
-            self.optimizer = torch.optim.SGD(self.parameters(), lr=self.lr, momentum=self.momentum)
-        return self.optimizer
-
-
-    def loss(self, input, recon, commitment_loss):
-        # Reconstruction loss is the mse between the input and the reconstruction
-        recon_term = F.mse_loss(input, recon)
-        return recon_term + commitment_loss
-
 
     def on_train_epoch_end(self) -> None:
         loss = sum(self.train_losses) / len(self.train_losses)
@@ -198,7 +195,13 @@ class VQVAE_CNN(L.LightningModule):
         print(f"\n test loss {loss}")
         print(f"\n test snr {sum(self.test_snr) / len(self.test_snr)}\n")
 
-
-
+    def configure_optimizers(self):
+        if self.optimizer == 'Adam':
+            self.optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
+        elif self.optimizer == 'RMSprop':
+            self.optimizer = torch.optim.RMSprop(self.parameters(), lr=self.lr)
+        elif self.optimizer == 'SGD':
+            self.optimizer = torch.optim.SGD(self.parameters(), lr=self.lr, momentum=self.momentum)
+        return self.optimizer
 
 

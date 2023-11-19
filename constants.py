@@ -30,19 +30,34 @@ class LearningHyperParameter(str, Enum):
     LSTM_LAYERS = "lstm_layers"
     COMMITMENT_COST = "commitment_cost"
 
+
 class Optimizers(Enum):
     ADAM = "Adam"
-    RMSPROP = "RMSprop"
-    SGD = "SGD"
+    LION = "LION"
 
-class Models(str, Enum):
+
+class Autoencoders(str, Enum):
     VAE = "VAE"
     VQVAE = "VQVAE"
+    RQVAE = "RQVAE"
 
+
+class Transformers(str, Enum):
+    TRANSFORMER = "Transformer"
+
+
+SEED = 0
+
+PRECISION = 32
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-AUDIO_FILES_DIR_TRAIN = 'train'
-AUDIO_FILES_DIR_VAL = 'validation'
-AUDIO_FILES_DIR_TEST = 'test'
-STEMS = ["bass","drums","guitar","piano"]
+AUDIO_FILES_DIR_TRAIN = 'data/train'
+AUDIO_FILES_DIR_VAL = 'data/validation'
+AUDIO_FILES_DIR_TEST = 'data/test'
+STEMS = ["bass", "drums", "guitar", "piano"]
+WANDB_DIR = "data/wandb"
+DIR_SAVED_MODEL = "data/checkpoints"
+DATA_DIR = "data"
+RECON_DIR = "data/reconstructions"
 
+PROJECT_NAME = "MMLM"

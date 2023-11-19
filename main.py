@@ -1,134 +1,57 @@
-import lightning as L
+from pathlib import Path
+
 import wandb
 from lightning.pytorch.loggers import WandbLogger
-from repo.models.VAE_MLP import VAE_MLP
-from repo.models.VAE_CNN import VAE_CNN
-import constants as cst
-from dataset import Datamodule, MultiSourceDataset
-from config import Configuration
-from lightning.pytorch.callbacks import Callback
-from lightning.pytorch.callbacks.early_stopping import EarlyStopping
+from run import run_wandb, run, sweep_init
 import torch
-from repo.models.VQVAE import VQVAE_CNN
+import constants as cst
+from config import Configuration
+from models.LitModel import LitModel
 
 
-def run():
-    config = Configuration()
-    if (config.IS_SWEEP):
-
-        wandb_logger = WandbLogger(project="MMLM", log_model=True, save_dir=cst.WANDB_DIR)
-        wandb_config = wandb_init()
-        checkpoint_callback = wandb.ModelCheckpoint(monitor="val_loss", mode="min")
-        #with wandb.init(config=wandb_config):
-        config = Configuration()
-
-        trainer = L.Trainer(
-            accelerator="cpu",
-            precision="32",
-            max_epochs=config.HYPER_PARAMETERS[cst.LearningHyperParameter.EPOCHS],
-            profiler="advanced",
-            callbacks=[EarlyStopping(monitor="val_loss", mode="min", patience=10, verbose=True), checkpoint_callback],
-            num_sanity_val_steps=0,
-            logger=wandb_logger,
-        )
-
-    else:
-        trainer = L.Trainer(
-            accelerator="cpu",
-            precision="32",
-            max_epochs=config.HYPER_PARAMETERS[cst.LearningHyperParameter.EPOCHS],
-            profiler="advanced",
-            callbacks=[EarlyStopping(monitor="val_loss", mode="min", patience=10, verbose=True)],
-            num_sanity_val_steps=0,
-        )
-
-    train_set = MultiSourceDataset(
-        sr=config.HYPER_PARAMETERS[cst.LearningHyperParameter.SAMPLE_RATE],
-        channels=config.HYPER_PARAMETERS[cst.LearningHyperParameter.CHANNEL_SIZE],
-        min_duration=config.HYPER_PARAMETERS[cst.LearningHyperParameter.MIN_DURATION],
-        max_duration=config.HYPER_PARAMETERS[cst.LearningHyperParameter.MAX_DURATION],
-        aug_shift=config.HYPER_PARAMETERS[cst.LearningHyperParameter.AUG_SHIFT],
-        sample_length=config.HYPER_PARAMETERS[cst.LearningHyperParameter.SAMPLE_LENGTH],
-        audio_files_dir=cst.AUDIO_FILES_DIR_TRAIN,
-        stems=cst.STEMS,
-    )
-    val_set = MultiSourceDataset(
-        sr=config.HYPER_PARAMETERS[cst.LearningHyperParameter.SAMPLE_RATE],
-        channels=config.HYPER_PARAMETERS[cst.LearningHyperParameter.CHANNEL_SIZE],
-        min_duration=config.HYPER_PARAMETERS[cst.LearningHyperParameter.MIN_DURATION],
-        max_duration=config.HYPER_PARAMETERS[cst.LearningHyperParameter.MAX_DURATION],
-        aug_shift=config.HYPER_PARAMETERS[cst.LearningHyperParameter.AUG_SHIFT],
-        sample_length=config.HYPER_PARAMETERS[cst.LearningHyperParameter.SAMPLE_LENGTH],
-        audio_files_dir=cst.AUDIO_FILES_DIR_VAL,
-        stems=cst.STEMS,
-    )
-    test_set = MultiSourceDataset(
-        sr=config.HYPER_PARAMETERS[cst.LearningHyperParameter.SAMPLE_RATE],
-        channels=config.HYPER_PARAMETERS[cst.LearningHyperParameter.CHANNEL_SIZE],
-        min_duration=config.HYPER_PARAMETERS[cst.LearningHyperParameter.MIN_DURATION],
-        max_duration=config.HYPER_PARAMETERS[cst.LearningHyperParameter.MAX_DURATION],
-        aug_shift=config.HYPER_PARAMETERS[cst.LearningHyperParameter.AUG_SHIFT],
-        sample_length=config.HYPER_PARAMETERS[cst.LearningHyperParameter.SAMPLE_LENGTH],
-        audio_files_dir=cst.AUDIO_FILES_DIR_TEST,
-        stems=cst.STEMS,
-    )
-    data_module = Datamodule(train_set, val_set, test_set, batch_size=config.HYPER_PARAMETERS[cst.LearningHyperParameter.BATCH_SIZE], num_workers=16)
-    train_dataloader, val_dataloader, test_dataloader = data_module.train_dataloader(), data_module.val_dataloader(), data_module.test_dataloader()
-    #model = VAE_MLP(config).to(cst.DEVICE)
-    #model = VAE_CNN(config).to(cst.DEVICE)
-    model = VQVAE_CNN(config).to(cst.DEVICE)
-    trainer.fit(model, train_dataloader, val_dataloader)
-    trainer.test(model, dataloaders=test_dataloader)
-    wandb.finish()
-
-
-def wandb_init():
-    wandb.login("d29d51017f4231b5149d36ad242526b374c9c60a")
-    sweep_config = {
-        'method': 'random',
-        'metric': {
-            'goal': 'minimize',
-            'name': 'validation_loss'
-        },
-        'early_terminate': {
-            'type': 'hyperband',
-            'min_iter': 15,
-            'eta': 2
-        },
-        'run_cap': 4
-    }
-
-    parameters_dict = {
-        'epochs': {
-            'value': 2
-        },
-        'optimizer': {
-            'values': ['adam', 'sgd']
-        },
-        'dropout': {
-            'values': [0.3, 0.4, 0.5]
-        },
-        'lr': {
-            'distribution': 'uniform',
-            'max': 0.01,
-            'min': 0.0001,
-        },
-        'batch_size': {
-            'values': [32, 64, 128]
-        },
-        'eps': {
-            'value': 1e-08
-        },
-        'weight_decay': {
-            'value': 0
-        }
-    }
-
-    sweep_config['parameters'] = parameters_dict
-    sweep_id = wandb.sweep(sweep_config, project="MMLM")
-    wandb.agent(sweep_id, run, count=sweep_config["run_cap"])
-    return sweep_config
+def set_torch():
+    #torch.manual_seed(cst.SEED)
+    torch.set_default_dtype(torch.float32)
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+    torch.autograd.set_detect_anomaly(True)
+    torch.set_float32_matmul_precision('high')
 
 if __name__ == "__main__":
-    torch.set_float32_matmul_precision('medium')
-    run()
+    set_torch()
+    torch.autograd.set_detect_anomaly(True)
+    config = Configuration()
+    if cst.DEVICE == "cpu":
+        accelerator = "cpu"
+    else:
+        accelerator = "gpu"
+
+
+    if config.IS_WANDB:
+        wandb_logger = WandbLogger(project=cst.PROJECT_NAME, log_model="all", save_dir=cst.DIR_SAVED_MODEL)
+        if config.IS_SWEEP:
+            sweep_config = sweep_init(config)
+            sweep_config.update({"name": f"model_{config.CHOSEN_MODEL.name}_stock_{config.CHOSEN_STOCK.name}_cond_type_{config.COND_TYPE}_cond_method_{config.COND_METHOD}_is_augmentation_{config.IS_AUGMENTATION}"})
+            sweep_id = wandb.sweep(sweep_config, project=cst.PROJECT_NAME)
+            wandb.agent(sweep_id, run_wandb(config, accelerator, wandb_logger), count=sweep_config["run_cap"])
+        else:
+            start_wandb = run_wandb(config, accelerator, wandb_logger)
+            start_wandb()
+
+    elif config.IS_TESTING:
+        dir = Path(cst.DIR_SAVED_MODEL + "/" + str(config.CHOSEN_MODEL.name))
+        best_val_loss = 100000
+
+        for file in dir.iterdir():
+            val_loss = float(file.name.split("=")[1].split("_")[0])
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                checkpoint_reference = file
+
+        # load checkpoint
+        model = LitModel.load_from_checkpoint(checkpoint_reference)
+        run(config, accelerator, model)
+
+    # training without using wandb
+    elif config.IS_TRAINING:
+        run(config, accelerator)

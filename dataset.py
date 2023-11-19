@@ -6,8 +6,8 @@ import librosa
 import torch
 from torch.utils.data import Dataset, DataLoader
 import pytorch_lightning as pl
-from utils import load_audio
-import constants as cst
+from repo.utils.utils import load_audio
+
 
 def _identity(x):
   return x
@@ -143,7 +143,7 @@ class MultiSourceDataset(Dataset):
         return self.get_item(item)
 
 
-class Datamodule(pl.LightningDataModule):
+class DataModule(pl.LightningDataModule):
     def __init__(
         self,
         train_dataset,

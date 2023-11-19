@@ -6,13 +6,18 @@ class Configuration:
     """ Represents the configuration file of the simulation, containing all variables of the simulation. """
     def __init__(self):
 
-        self.IS_TEST_ONLY = False
+        self.IS_WANDB = False
+        self.IS_SWEEP = True
+        self.IS_TESTING = False
+        self.IS_TRAINING = True
+        self.IS_DEBUG = False
+        self.IS_TRAINING_AE = True
 
         self.SEED = 0
 
-        self.CHOSEN_MODEL = cst.Models.VAE
-
-        self.IS_SWEEP = False
+        self.CHOSEN_AE = cst.Autoencoders.VQVAE
+        self.CHOSEN_TRANSFORMER = cst.Transformers.TRANSFORMER
+        self.CHOSEN_MODEL = self.CHOSEN_AE if self.IS_TRAINING_AE else self.CHOSEN_TRANSFORMER
 
         self.SWEEP_METHOD = 'bayes'
 
@@ -33,8 +38,8 @@ class Configuration:
         self.HYPER_PARAMETERS = {hp: None for hp in LearningHyperParameter}
 
         self.HYPER_PARAMETERS[LearningHyperParameter.BATCH_SIZE] = 64
-        self.HYPER_PARAMETERS[LearningHyperParameter.LEARNING_RATE] = 0.00001
-        self.HYPER_PARAMETERS[LearningHyperParameter.EPOCHS] = 100
+        self.HYPER_PARAMETERS[LearningHyperParameter.LEARNING_RATE] = 0.0001
+        self.HYPER_PARAMETERS[LearningHyperParameter.EPOCHS] = 20
         self.HYPER_PARAMETERS[LearningHyperParameter.OPTIMIZER] = cst.Optimizers.ADAM.value
         self.HYPER_PARAMETERS[LearningHyperParameter.WEIGHT_DECAY] = 0.0
         self.HYPER_PARAMETERS[LearningHyperParameter.EPS] = 1e-08  # default value for ADAM
