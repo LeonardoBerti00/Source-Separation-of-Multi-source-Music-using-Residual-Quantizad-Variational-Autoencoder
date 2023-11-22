@@ -13,7 +13,7 @@ from utils.utils import compute_output_dim_convtranspose, compute_output_dim_con
 
 
 class VQVAE(L.LightningModule):
-    def __init__(self, config: Configuration, val_num_steps: int, test_num_steps: int, trainer: L.Trainer):
+    def __init__(self, config: Configuration):
         super().__init__()
 
         self.codebook_length = config.HYPER_PARAMETERS[LearningHyperParameter.CODEBOOK_LENGTH]
@@ -24,7 +24,7 @@ class VQVAE(L.LightningModule):
         self.momentum = config.HYPER_PARAMETERS[LearningHyperParameter.MOMENTUM]
         self.is_training = config.IS_TRAINING
         self.batch_size = config.HYPER_PARAMETERS[LearningHyperParameter.BATCH_SIZE]
-        self.commitment_cost = config.HYPER_PARAMETERS[LearningHyperParameter.COMMITMENT_COST]
+        self.beta = config.HYPER_PARAMETERS[LearningHyperParameter.BETA]
         self.train_losses, self.val_losses, self.test_losses = [], [], []
         self.val_ema_losses, self.test_ema_losses = [], []
         self.val_snr, self.test_snr = [], []
@@ -103,7 +103,7 @@ class VQVAE(L.LightningModule):
             )
 
     def forward(self, x):
-
+        #if it is 1D we transform 4 x 22050 in 32 patches of size 32.
         z_e, z_q = self.encode(x)
         z_q = z_e + (z_q - z_e).detach()
         z_q = rearrange(z_q, '(b l) c -> b l c', b=x.shape[0])
@@ -121,17 +121,24 @@ class VQVAE(L.LightningModule):
         return z_e, z_q
 
     def vector_quantization(self, z_e):
-
         dist = torch.cdist(z_e, self.codebook)
         _, encoding_indices = torch.min(dist, dim=1)
         encodings = F.one_hot(encoding_indices, self.codebook_length).float()
         z_q = torch.matmul(encodings, self.codebook.data)
-
         return z_q
 
+    def loss(self, input, recon, z_q, z_e):
+        # Commitment loss is the mse between the quantized latent vector and the encoder output
+        q_latent_loss = F.mse_loss(z_e.detach(), z_q)      # we train the codebook
+        e_latent_loss = F.mse_loss(z_e, z_q.detach())      # we train the encoder
+        commitment_loss = q_latent_loss + self.beta * e_latent_loss
+        # Reconstruction loss is the mse between the input and the reconstruction
+        recon_term = F.mse_loss(input, recon)
+        return recon_term + commitment_loss
+
     def training_step(self, x, batch_idx):
-        recon, commitment_loss = self.forward(x)
-        loss = self.loss(x, recon, commitment_loss)
+        recon, z_q, z_e = self.forward(x)
+        loss = self.loss(x, recon, z_q, z_e)
         self.log('train_loss', loss)
         self.train_losses.append(loss)
         return loss
@@ -161,18 +168,7 @@ class VQVAE(L.LightningModule):
             self.optimizer = torch.optim.SGD(self.parameters(), lr=self.lr, momentum=self.momentum)
         return self.optimizer
 
-    def loss(self, input, recon, commitment_loss):
 
-        # Commitment loss is the mse between the quantized latent vector and the encoder output
-        q_latent_loss = F.mse_loss(z_e.detach(), z_q)
-        e_latent_loss = F.mse_loss(z_e, z_q.detach())
-        commitment_loss = q_latent_loss + self.commitment_cost * e_latent_loss
-
-
-
-        # Reconstruction loss is the mse between the input and the reconstruction
-        recon_term = F.mse_loss(input, recon)
-        return recon_term + commitment_loss
 
     def on_train_epoch_end(self) -> None:
         loss = sum(self.train_losses) / len(self.train_losses)
