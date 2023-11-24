@@ -1,6 +1,7 @@
 from einops import rearrange
 from torch import nn
-from utils import compute_output_dim_convtranspose, compute_output_dim_conv
+from utils.utils import compute_output_dim_convtranspose, compute_output_dim_conv
+from models.ResidualLayer import ResidualLayer
 
 class Decoder_CNN2D(nn.Module):
     def __init__(self,
@@ -13,6 +14,7 @@ class Decoder_CNN2D(nn.Module):
                  lstm_layers: int,
                  batch_size: int,
                  emb_sample_len: int,
+                 num_convs: int,
                  ):
         super().__init__()
 
@@ -26,16 +28,30 @@ class Decoder_CNN2D(nn.Module):
         """
 
         self.LSTM = nn.LSTM(input_size=latent_dim, hidden_size=hidden_channels[-1], num_layers=lstm_layers, batch_first=True)
-        #print(latent_dim)
         modules = []
-        for i in range(1, len(kernel_sizes)+1):
+        for i in range(1, num_convs+1):
             if i==1:
+                if (emb_sample_len == 64):
+                    dilation = (dilations[-i][0], dilations[-i][1]+1)
+                else:
+                    dilation = (dilations[-i][0], dilations[-i][1])
                 after_conv_sample_len = compute_output_dim_convtranspose(input_dim=emb_sample_len,
                                                                 kernel_size=kernel_sizes[-i][1],
                                                                 stride=strides[-i][1],
-                                                                dilation=dilations[-i][1],
+                                                                dilation=dilation,
                                                                 padding=paddings[-i][1]
                                                                 )
+                modules.append(nn.Sequential(
+                    nn.ConvTranspose2d(in_channels=hidden_channels[-i],
+                                       out_channels=hidden_channels[-i-1],
+                                       kernel_size=kernel_sizes[-i],
+                                       stride=strides[-i],
+                                       dilation=dilation,
+                                       padding=paddings[-i],
+                                       bias=False
+                                       ),
+                    nn.LeakyReLU(True))
+                )
             else:
                 after_conv_sample_len = compute_output_dim_convtranspose(input_dim=after_conv_sample_len,
                                                                          kernel_size=kernel_sizes[-i][1],
@@ -43,18 +59,17 @@ class Decoder_CNN2D(nn.Module):
                                                                          dilation=dilations[-i][1],
                                                                          padding=paddings[-i][1]
                                                                          )
-            modules.append(nn.Sequential(
-                #nn.ZeroPad2d((kernel_sizes[-i][1]//2, kernel_sizes[-i][1]//2, 0, 0)),
-                nn.ConvTranspose2d(in_channels=hidden_channels[-i],
-                                   out_channels=hidden_channels[-i-1],
-                                   kernel_size=kernel_sizes[-i],
-                                   stride=strides[-i],
-                                   dilation=dilations[-i],
-                                   padding=paddings[-i],
-                                   bias=False
-                                   ),
-                nn.LeakyReLU(True))
-            )
+                modules.append(nn.Sequential(
+                    nn.ConvTranspose2d(in_channels=hidden_channels[-i],
+                                       out_channels=hidden_channels[-i-1],
+                                       kernel_size=kernel_sizes[-i],
+                                       stride=strides[-i],
+                                       dilation=dilations[-i],
+                                       padding=paddings[-i],
+                                       bias=False
+                                       ),
+                    nn.LeakyReLU(True))
+                )
             #print(after_conv_sample_len)
 
         self.Convs = nn.Sequential(*modules)
@@ -86,29 +101,25 @@ class Decoder_CNN1D(nn.Module):
                  lstm_layers: int,
                  batch_size: int,
                  emb_sample_len: int,
+                 num_convs: int,
+                 is_residual: bool,
                  ):
         super().__init__()
         """
         This is a convolutional neural network (CNN) used as encoder and decoder.
-
-        Parameters:
-        - input_size: int, the size of the input dimension
-        - channel_size: int, the number of channels in the input
-        - hidden1: int, the size of the first hidden layer
-        - hidden2: int, the size of the second hidden layer
-        - hidden3: int, the size of the third hidden layer
-        - hidden4: int, the size of the fourth hidden layer
-        - kernel_size: int, the size of the kernel
-        - latent_dim: int, the size of the latent dimension
         """
         self.LSTM = nn.LSTM(input_size=latent_dim, hidden_size=hidden_channels[-1], num_layers=lstm_layers, batch_first=True)
         modules = []
-        for i in range(1, len(kernel_sizes)+1):
+        for i in range(1, num_convs+1):
             if i==1:
+                if (emb_sample_len == 64):
+                    dilation = dilations[-i][1]+1
+                else:
+                    dilation = dilations[-i][1]
                 after_conv_sample_len = compute_output_dim_convtranspose(input_dim=emb_sample_len,
                                                                 kernel_size=kernel_sizes[-i][1],
                                                                 stride=strides[-i][1],
-                                                                dilation=dilations[-i][1],
+                                                                dilation=dilation,
                                                                 padding=paddings[-i][1]
                                                                 )
                 modules.append(nn.Sequential(
@@ -116,13 +127,16 @@ class Decoder_CNN1D(nn.Module):
                                        out_channels=hidden_channels[-i - 1],
                                        kernel_size=kernel_sizes[-i][1],
                                        stride=strides[-i][1],
-                                       dilation=dilations[-i][1],
+                                       dilation=dilation,
                                        padding=paddings[-i][1],
                                        bias=False
                                        ),
-                    nn.LeakyReLU(True))
+                    nn.BatchNorm1d(hidden_channels[-i - 1]),
+                    nn.LeakyReLU(True),
+                    ResidualLayer(hidden_channels[-i - 1]) if is_residual else None,
+                    )
                 )
-            elif i==len(kernel_sizes):
+            elif i==num_convs:
                 after_conv_sample_len = compute_output_dim_convtranspose(input_dim=after_conv_sample_len,
                                                                          kernel_size=kernel_sizes[-i][1],
                                                                          stride=strides[-i][1],
@@ -138,7 +152,7 @@ class Decoder_CNN1D(nn.Module):
                                        padding=paddings[-i][1],
                                        bias=False
                                        ),
-                    nn.LeakyReLU(True))
+                    )
                 )
             else:
                 after_conv_sample_len = compute_output_dim_convtranspose(input_dim=after_conv_sample_len,
@@ -156,22 +170,26 @@ class Decoder_CNN1D(nn.Module):
                                        padding=paddings[-i][1],
                                        bias=False
                                        ),
-                    nn.LeakyReLU(True))
+                    nn.BatchNorm1d(hidden_channels[-i - 1]),
+                    nn.LeakyReLU(True),
+                    ResidualLayer(hidden_channels[-i - 1]) if is_residual else None,
+                    )
                 )
-            print(after_conv_sample_len)
+            #print(after_conv_sample_len)
 
         self.Convs = nn.Sequential(*modules)
         self.batch_size = batch_size
 
 
     def forward(self, x):
-        print("decoder")
-        print(x.shape)
+        #print("decoder")
+        #print(x.shape)
         x, _ = self.LSTM(x)
-        print(x.shape)
-        x = rearrange(x, 'b w c -> b c w')
+        #print(x.shape)
+        x = rearrange(x, 'b l c -> b c l')
+        #print(x.shape)
         x = self.Convs(x)
-        print(x.shape)
+        #print(x.shape)
 
         return x
 

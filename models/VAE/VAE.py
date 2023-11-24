@@ -1,35 +1,26 @@
 import torch
+import wandb
 from einops import rearrange
 import lightning as L
-from repo.constants import LearningHyperParameter
+from lion_pytorch import Lion
+from torch_ema import ExponentialMovingAverage
+
+from constants import LearningHyperParameter
 from torch import nn
-from models.Encoders import Encoder_CNN2D, Encoder_CNN1D, Encoder_MLP
-from models.Decoders import Decoder_CNN2D, Decoder_CNN1D, Decoder_MLP
+from models.Encoders import Encoder_CNN2D, Encoder_CNN1D
+from models.Decoders import Decoder_CNN2D, Decoder_CNN1D
 from torchmetrics.audio import ScaleInvariantSignalNoiseRatio
-from utils import compute_output_dim_conv, compute_output_dim_convtranspose
+from utils.utils import compute_output_dim_conv, compute_output_dim_convtranspose
 
 
 class VAE(L.LightningModule):
     def __init__(self, config):
         super().__init__()
-        """
-        This is a convolutional neural network (CNN) used as encoder and decoder.
 
-        Parameters:
-        - input_size: int, the size of the input dimension
-        - channel_size: int, the number of channels in the input
-        - hidden1: int, the size of the first hidden layer
-        - hidden2: int, the size of the second hidden layer
-        - hidden3: int, the size of the third hidden layer
-        - hidden4: int, the size of the fourth hidden layer
-        - kernel_size: int, the size of the kernel
-        - latent_dim: int, the size of the latent dimension
-        """
         self.latent_dim = config.HYPER_PARAMETERS[LearningHyperParameter.LATENT_DIM]
         self.audio_srcs = config.AUDIO_SRCS
         self.lr = config.HYPER_PARAMETERS[LearningHyperParameter.LEARNING_RATE]
         self.optimizer = config.HYPER_PARAMETERS[LearningHyperParameter.OPTIMIZER]
-        self.momentum = config.HYPER_PARAMETERS[LearningHyperParameter.MOMENTUM]
         self.training = config.IS_TRAINING
         self.batch_size = config.HYPER_PARAMETERS[LearningHyperParameter.BATCH_SIZE]
         self.train_losses = []
@@ -45,8 +36,10 @@ class VAE(L.LightningModule):
         strides = config.HYPER_PARAMETERS[LearningHyperParameter.STRIDES]
         init_sample_len = config.HYPER_PARAMETERS[LearningHyperParameter.SAMPLE_LENGTH]
         kernel_sizes = config.HYPER_PARAMETERS[LearningHyperParameter.KERNEL_SIZES]
+        num_convs = config.HYPER_PARAMETERS[LearningHyperParameter.NUM_CONVS]
+        self.ema = ExponentialMovingAverage(self.parameters(), decay=0.999)
 
-        for i in range(len(kernel_sizes)):
+        for i in range(num_convs):
             if i == 0:
                 emb_sample_len = compute_output_dim_conv(input_dim=init_sample_len,
                                                     kernel_size=kernel_sizes[i][1],
@@ -60,80 +53,75 @@ class VAE(L.LightningModule):
                                                     dilation=dilations[i][1],
                                                     stride=strides[i][1])
 
-
         if config.IS_ONED:
             self.encoder = Encoder_CNN1D(
                 input_size=config.HYPER_PARAMETERS[LearningHyperParameter.SAMPLE_LENGTH],
                 audio_srcs=config.AUDIO_SRCS,
                 hidden_channels=config.HYPER_PARAMETERS[LearningHyperParameter.HIDDEN_CHANNELS],
-                kernel_sizes=config.HYPER_PARAMETERS[LearningHyperParameter.KERNEL_SIZES],
-                strides=config.HYPER_PARAMETERS[LearningHyperParameter.STRIDES],
-                paddings=config.HYPER_PARAMETERS[LearningHyperParameter.PADDINGS],
-                dilations=config.HYPER_PARAMETERS[LearningHyperParameter.DILATIONS],
+                kernel_sizes=kernel_sizes,
+                strides=strides,
+                paddings=paddings,
+                dilations=dilations,
                 latent_dim=config.HYPER_PARAMETERS[LearningHyperParameter.LATENT_DIM],
                 lstm_layers=config.HYPER_PARAMETERS[LearningHyperParameter.LSTM_LAYERS],
+                num_convs=num_convs
             )
             self.decoder = Decoder_CNN1D(
                 audio_srcs=config.AUDIO_SRCS,
                 hidden_channels=config.HYPER_PARAMETERS[LearningHyperParameter.HIDDEN_CHANNELS],
-                kernel_sizes=config.HYPER_PARAMETERS[LearningHyperParameter.KERNEL_SIZES],
-                strides=config.HYPER_PARAMETERS[LearningHyperParameter.STRIDES],
-                paddings=config.HYPER_PARAMETERS[LearningHyperParameter.PADDINGS],
-                dilations=config.HYPER_PARAMETERS[LearningHyperParameter.DILATIONS],
+                kernel_sizes=kernel_sizes,
+                strides=strides,
+                paddings=paddings,
+                dilations=dilations,
                 latent_dim=config.HYPER_PARAMETERS[LearningHyperParameter.LATENT_DIM],
                 lstm_layers=config.HYPER_PARAMETERS[LearningHyperParameter.LSTM_LAYERS],
                 batch_size=config.HYPER_PARAMETERS[LearningHyperParameter.BATCH_SIZE],
                 emb_sample_len=emb_sample_len,
+                num_convs=num_convs
             )
 
         else:
             self.encoder = Encoder_CNN2D(
                 input_size=config.HYPER_PARAMETERS[LearningHyperParameter.SAMPLE_LENGTH],
                 hidden_channels=config.HYPER_PARAMETERS[LearningHyperParameter.HIDDEN_CHANNELS],
-                kernel_sizes=config.HYPER_PARAMETERS[LearningHyperParameter.KERNEL_SIZES],
-                strides=config.HYPER_PARAMETERS[LearningHyperParameter.STRIDES],
-                paddings=config.HYPER_PARAMETERS[LearningHyperParameter.PADDINGS],
-                dilations=config.HYPER_PARAMETERS[LearningHyperParameter.DILATIONS],
+                kernel_sizes=kernel_sizes,
+                strides=strides,
+                paddings=paddings,
+                dilations=dilations,
                 latent_dim=config.HYPER_PARAMETERS[LearningHyperParameter.LATENT_DIM],
                 lstm_layers=config.HYPER_PARAMETERS[LearningHyperParameter.LSTM_LAYERS],
+                num_convs=num_convs
             )
             self.decoder = Decoder_CNN2D(
                 hidden_channels=config.HYPER_PARAMETERS[LearningHyperParameter.HIDDEN_CHANNELS],
-                kernel_sizes=config.HYPER_PARAMETERS[LearningHyperParameter.KERNEL_SIZES],
-                strides=config.HYPER_PARAMETERS[LearningHyperParameter.STRIDES],
-                paddings=config.HYPER_PARAMETERS[LearningHyperParameter.PADDINGS],
-                dilations=config.HYPER_PARAMETERS[LearningHyperParameter.DILATIONS],
+                kernel_sizes=kernel_sizes,
+                strides=strides,
+                paddings=paddings,
+                dilations=dilations,
                 latent_dim=config.HYPER_PARAMETERS[LearningHyperParameter.LATENT_DIM],
                 lstm_layers=config.HYPER_PARAMETERS[LearningHyperParameter.LSTM_LAYERS],
                 batch_size=config.HYPER_PARAMETERS[LearningHyperParameter.BATCH_SIZE],
                 emb_sample_len=emb_sample_len,
+                num_convs=num_convs
             )
 
-
-        self.fc_mu = nn.Linear(in_features=self.latent_dim*emb_sample_len,
-                               out_features=self.latent_dim)
-        self.fc_log_var = nn.Linear(in_features=self.latent_dim*emb_sample_len,
-                                    out_features=self.latent_dim)
-
-        self.fc = nn.Linear(in_features=self.latent_dim, out_features=self.latent_dim*emb_sample_len)
+        self.fc = nn.Linear(in_features=self.latent_dim*emb_sample_len,
+                               out_features=2*self.latent_dim*emb_sample_len)
 
     def forward(self, x):
 
         x = self.encoder(x)
         x = rearrange(x, 'b c t -> b (c t)')
-        mean = self.fc_mu(x)
-        log_var = self.fc_log_var(x)
+        mean, log_var = self.fc(x).chunk(2, dim=-1)
         if self.training:
             var = torch.exp(0.5 * log_var)
             #print(torch.mean(var))
             #print(torch.mean(mean))
             normal_distribution = torch.distributions.Normal(loc=mean, scale=var)
             sampling = normal_distribution.rsample()    # rsample implements the reparametrization trick
-
         else:
             sampling = mean
 
-        sampling = self.fc(sampling)
         sampling = rearrange(sampling, 'b (c w) -> b c w', c=self.latent_dim)
         recon = self.decoder(sampling)
         if not self.IS_ONED:
@@ -156,52 +144,90 @@ class VAE(L.LightningModule):
         return recon_term + kl_divergence
 
 
-
     def training_step(self, x, batch_idx):
+        if self.global_step == 0 and self.IS_WANDB:
+            self._define_log_metrics()
         recon, mean, log_var = self.forward(x)
-        loss = self.loss(x, recon, mean, log_var)
-        self.train_losses.append(loss)
-        self.log('train_loss', loss)
-        self.train_snr.append(self.si_snr(x, recon))
-        return loss
-
-    def validation_step(self, x, batch_idx):
-        recon, mean, log_var = self.forward(x)
-        loss = self.loss(x, recon, mean, log_var)
-        self.log('val_loss', loss)
-        self.val_losses.append(loss)
-        self.val_snr.append(self.si_snr(x, recon))
-        return loss
-
-    def test_step(self, x, batch_idx):
-        recon, mean, log_var = self.forward(x)
-        loss = self.loss(x, recon, mean, log_var)
-        self.log('test_loss', loss)
-        self.test_losses.append(loss)
-        self.test_snr.append(self.si_snr(x, recon))
-        return loss
+        batch_losses = self.loss(x, recon, mean, log_var)
+        batch_loss_mean = torch.mean(batch_losses)
+        self.train_losses.append(batch_loss_mean.item())
+        self.ema.update()
+        return batch_loss_mean
 
     def on_train_epoch_end(self) -> None:
         loss = sum(self.train_losses) / len(self.train_losses)
-        print(f"\n train loss {loss}\n")
+        if self.IS_WANDB:
+            wandb.log({'train_loss': loss}, step=self.current_epoch + 1)
+        print(f'\ntrain loss on epoch {self.current_epoch} is {loss}')
+
+    def validation_step(self, x, batch_idx):
+        recon, mean, log_var = self.forward(x)
+        batch_losses = self.loss(x, recon, mean, log_var)
+        batch_loss_mean = torch.mean(batch_losses)
+        self.val_losses.append(batch_loss_mean.item())
+        self.val_snr.append(self.si_snr(x, recon))
+        # Validation: with EMA
+        with self.ema.average_parameters():
+            recon = self.forward(x)
+            batch_ema_losses = self.loss(x, recon)
+            ema_loss = torch.mean(batch_ema_losses)
+            self.val_ema_losses.append(ema_loss)
+        self.val_snr.append(self.si_snr(x, recon))
+        return batch_loss_mean
 
     def on_validation_epoch_end(self) -> None:
         loss = sum(self.val_losses) / len(self.val_losses)
-        print(f"\n val loss {loss}")
-        print(f"\n val snr {sum(self.val_snr) / len(self.val_snr)}\n")
+        loss_ema = sum(self.val_ema_losses) / len(self.val_ema_losses)
+        self.log('val_loss', self.val_loss)
+        if self.IS_WANDB:
+            wandb.log({'val_ema_loss': loss_ema}, step=self.current_epoch)
+        print(f"\n val loss on epoch {self.current_epoch} is {loss}")
+        print(f"\n val ema loss on epoch {self.current_epoch} is {loss_ema}")
+
+    def test_step(self, x, batch_idx):
+        recon, mean, log_var = self.forward(x)
+        batch_losses = self.loss(x, recon, mean, log_var)
+        batch_loss_mean = torch.mean(batch_losses)
+        self.test_losses.append(batch_loss_mean.item())
+        self.test_snr.append(self.si_snr(x, recon))
+        '''
+        if batch_idx != self.test_num_batches - 1:
+            self.test_reconstructions[
+            batch_idx * self.batch_size:(batch_idx + 1) * self.batch_size] = recon.cpu().detach().numpy()
+        else:
+            self.test_reconstructions[batch_idx * self.batch_size:] = recon.cpu().detach().numpy()
+        '''
+        # Testing: with EMA
+        with self.ema.average_parameters():
+            recon, commitment_loss = self.forward(x)
+            batch_ema_losses = self.loss(x, recon, commitment_loss)
+            ema_loss = torch.mean(batch_ema_losses)
+            self.test_ema_losses.append(ema_loss.item())
+            '''
+            if batch_idx != self.test_num_batches - 1:
+                self.test_ema_reconstructions[
+                batch_idx * self.batch_size:(batch_idx + 1) * self.batch_size] = recon.cpu().detach().numpy()
+            else:
+                self.test_ema_reconstructions[batch_idx * self.batch_size:] = recon.cpu().detach().numpy()
+            '''
+        return batch_loss_mean
 
     def on_test_epoch_end(self) -> None:
         loss = sum(self.test_losses) / len(self.test_losses)
-        print(f"\n test loss {loss}")
-        print(f"\n test snr {sum(self.test_snr) / len(self.test_snr)}\n")
+        loss_ema = sum(self.test_ema_losses) / len(self.test_ema_losses)
+        if self.IS_WANDB:
+            wandb.log({'test_loss': loss})
+            wandb.log({'test_ema_loss': loss_ema})
+        print(f"\n test loss on epoch {self.current_epoch} is {loss}")
+        print(f"\n test ema loss on epoch {self.current_epoch} is {loss_ema}")
+        #numpy.save(cst.RECON_DIR + "/test_reconstructions.npy", self.test_reconstructions)
+        #numpy.save(cst.RECON_DIR + "/test_ema_reconstructions.npy", self.test_ema_reconstructions)
 
     def configure_optimizers(self):
         if self.optimizer == 'Adam':
             self.optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
-        elif self.optimizer == 'RMSprop':
-            self.optimizer = torch.optim.RMSprop(self.parameters(), lr=self.lr)
-        elif self.optimizer == 'SGD':
-            self.optimizer = torch.optim.SGD(self.parameters(), lr=self.lr, momentum=self.momentum)
+        elif self.optimizer == 'LION':
+            self.optimizer = Lion(self.parameters(), lr=self.lr)
         return self.optimizer
 
 

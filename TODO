@@ -1,5 +1,8 @@
-1. Complete integration wandb
-3. Sweep VAE
-4. Sweep VQ-VAE
-6. Implementing RQ-VAE
-7. Read Harmonic
+- Write what i've done until now
+- Sweep VAE
+- Sweep VQ-VAE
+- Implementing RQ-VAE
+- Implementing Transformer and sampling
+- Training VQ-VAE codebook distribution
+- Read Harmonic
+- Implementing Harmonic

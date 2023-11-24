@@ -31,7 +31,7 @@ if __name__ == "__main__":
         wandb_logger = WandbLogger(project=cst.PROJECT_NAME, log_model="all", save_dir=cst.DIR_SAVED_MODEL)
         if config.IS_SWEEP:
             sweep_config = sweep_init(config)
-            sweep_config.update({"name": f"model_{config.CHOSEN_MODEL.name}_stock_{config.CHOSEN_STOCK.name}_cond_type_{config.COND_TYPE}_cond_method_{config.COND_METHOD}_is_augmentation_{config.IS_AUGMENTATION}"})
+            sweep_config.update({"name": f"model_{config.CHOSEN_MODEL.name}"})
             sweep_id = wandb.sweep(sweep_config, project=cst.PROJECT_NAME)
             wandb.agent(sweep_id, run_wandb(config, accelerator, wandb_logger), count=sweep_config["run_cap"])
         else:

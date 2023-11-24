@@ -23,7 +23,7 @@ def train(config, trainer):
 
     train_set = MultiSourceDataset(
         sr=config.HYPER_PARAMETERS[cst.LearningHyperParameter.SAMPLE_RATE],
-        channels=config.HYPER_PARAMETERS[cst.LearningHyperParameter.CHANNEL_SIZE],
+        channels=cst.CHANNEL_SIZE,
         min_duration=config.HYPER_PARAMETERS[cst.LearningHyperParameter.MIN_DURATION],
         max_duration=config.HYPER_PARAMETERS[cst.LearningHyperParameter.MAX_DURATION],
         aug_shift=config.HYPER_PARAMETERS[cst.LearningHyperParameter.AUG_SHIFT],
@@ -34,7 +34,7 @@ def train(config, trainer):
 
     val_set = MultiSourceDataset(
         sr=config.HYPER_PARAMETERS[cst.LearningHyperParameter.SAMPLE_RATE],
-        channels=config.HYPER_PARAMETERS[cst.LearningHyperParameter.CHANNEL_SIZE],
+        channels=cst.CHANNEL_SIZE,
         min_duration=config.HYPER_PARAMETERS[cst.LearningHyperParameter.MIN_DURATION],
         max_duration=config.HYPER_PARAMETERS[cst.LearningHyperParameter.MAX_DURATION],
         aug_shift=config.HYPER_PARAMETERS[cst.LearningHyperParameter.AUG_SHIFT],
@@ -45,7 +45,7 @@ def train(config, trainer):
 
     test_set = MultiSourceDataset(
         sr=config.HYPER_PARAMETERS[cst.LearningHyperParameter.SAMPLE_RATE],
-        channels=config.HYPER_PARAMETERS[cst.LearningHyperParameter.CHANNEL_SIZE],
+        channels=cst.CHANNEL_SIZE,
         min_duration=config.HYPER_PARAMETERS[cst.LearningHyperParameter.MIN_DURATION],
         max_duration=config.HYPER_PARAMETERS[cst.LearningHyperParameter.MAX_DURATION],
         aug_shift=config.HYPER_PARAMETERS[cst.LearningHyperParameter.AUG_SHIFT],
@@ -67,6 +67,7 @@ def train(config, trainer):
             trainer=trainer
         ).to(cst.DEVICE, torch.float32)
 
+    print("\nstarting training\n")
     trainer.fit(model, train_dataloader, val_dataloader)
     trainer.test(model, dataloaders=test_dataloader)
 
@@ -75,7 +76,7 @@ def test(config, trainer, model):
 
     test_set = MultiSourceDataset(
         sr=config.HYPER_PARAMETERS[cst.LearningHyperParameter.SAMPLE_RATE],
-        channels=config.HYPER_PARAMETERS[cst.LearningHyperParameter.CHANNEL_SIZE],
+        channels=cst.CHANNEL_SIZE,
         min_duration=config.HYPER_PARAMETERS[cst.LearningHyperParameter.MIN_DURATION],
         max_duration=config.HYPER_PARAMETERS[cst.LearningHyperParameter.MAX_DURATION],
         aug_shift=config.HYPER_PARAMETERS[cst.LearningHyperParameter.AUG_SHIFT],
@@ -161,7 +162,6 @@ def run_wandb(config, accelerator, wandb_logger):
                 logger=wandb_logger,
             )
             train(config, trainer)
-        wandb.finish()
     return wandb_sweep_callback
 
 
