@@ -103,16 +103,19 @@ class Decoder_CNN1D(nn.Module):
                  emb_sample_len: int,
                  num_convs: int,
                  is_residual: bool,
+                 duration: int,
                  ):
         super().__init__()
         """
         This is a convolutional neural network (CNN) used as encoder and decoder.
         """
-        self.LSTM = nn.LSTM(input_size=latent_dim, hidden_size=hidden_channels[-1], num_layers=lstm_layers, batch_first=True)
+        self.LSTM = nn.LSTM(input_size=latent_dim, hidden_size=hidden_channels[num_convs], num_layers=lstm_layers, batch_first=True)
         modules = []
-        for i in range(1, num_convs+1):
-            if i==1:
-                if (emb_sample_len == 64):
+        start = len(kernel_sizes) - num_convs + 1
+        end = len(kernel_sizes) + 1
+        for i in range(start, end):
+            if i==start:
+                if emb_sample_len == 64:
                     dilation = dilations[-i][1]+1
                 else:
                     dilation = dilations[-i][1]
@@ -136,7 +139,7 @@ class Decoder_CNN1D(nn.Module):
                     ResidualLayer(hidden_channels[-i - 1]) if is_residual else None,
                     )
                 )
-            elif i==num_convs:
+            elif i==end:
                 after_conv_sample_len = compute_output_dim_convtranspose(input_dim=after_conv_sample_len,
                                                                          kernel_size=kernel_sizes[-i][1],
                                                                          stride=strides[-i][1],
@@ -175,21 +178,20 @@ class Decoder_CNN1D(nn.Module):
                     ResidualLayer(hidden_channels[-i - 1]) if is_residual else None,
                     )
                 )
-            #print(after_conv_sample_len)
+            print(after_conv_sample_len)
 
         self.Convs = nn.Sequential(*modules)
         self.batch_size = batch_size
 
 
     def forward(self, x):
-        #print("decoder")
-        #print(x.shape)
+        print(f"\nstart decoding: {x.shape}")
         x, _ = self.LSTM(x)
-        #print(x.shape)
+        print(f"\nprint shape after lstm: {x.shape}")
         x = rearrange(x, 'b l c -> b c l')
-        #print(x.shape)
+        print(f"\nprint shape after rearrange: {x.shape}")
         x = self.Convs(x)
-        #print(x.shape)
+        print(f"\nprint shape after convs: {x.shape}")
 
         return x
 

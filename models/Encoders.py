@@ -100,20 +100,21 @@ class Encoder_CNN1D(nn.Module):
                                                      padding=paddings[i][1],
                                                      dilation=dilations[i][1],
                                                      stride=strides[i][1])
-            #print(output_dim)
+            print(output_dim)
 
-        self.LSTM = nn.LSTM(input_size=hidden_channels[-1], hidden_size=latent_dim, num_layers=lstm_layers, batch_first=True)
+        final_channel = -(len(kernel_sizes) - num_convs + 1)
+        self.LSTM = nn.LSTM(input_size=hidden_channels[final_channel], hidden_size=latent_dim, num_layers=lstm_layers, batch_first=True)
         self.Convs = nn.Sequential(*modules)
         self.input_size = input_size
 
     def forward(self, x):
-        #print(x.shape)
+        print(f"\nstart encoding: {x.shape}")
         x = self.Convs(x)
-        #print(x.shape)
+        print(f"\nshape after convs: {x.shape}")
         x = rearrange(x, 'b c l -> b l c')
-        #print(x.shape)
+        print(f"\nshape after rearrange: {x.shape}")
         x, _ = self.LSTM(x)
-        #print(x.shape)
+        print(f"\nshape after LSTM: {x.shape}")
         return x
 
 

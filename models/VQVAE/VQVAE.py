@@ -57,7 +57,6 @@ class VQVAE(L.LightningModule):
                                                          padding=paddings[i][1],
                                                          dilation=dilations[i][1],
                                                          stride=strides[i][1])
-
         self.codebook = nn.Embedding(self.codebook_length, self.latent_dim)
         self.codebook.weight.data.uniform_(-1 / self.codebook_length, 1 / self.codebook_length)
 
@@ -73,7 +72,7 @@ class VQVAE(L.LightningModule):
                 latent_dim=config.HYPER_PARAMETERS[LearningHyperParameter.LATENT_DIM],
                 lstm_layers=config.HYPER_PARAMETERS[LearningHyperParameter.LSTM_LAYERS],
                 num_convs=num_convs,
-                is_residual=self.IS_RESIDUAL
+                is_residual=self.IS_RESIDUAL,
             )
             self.decoder = Decoder_CNN1D(
                 audio_srcs=len(cst.STEMS),
@@ -87,7 +86,8 @@ class VQVAE(L.LightningModule):
                 batch_size=config.HYPER_PARAMETERS[LearningHyperParameter.BATCH_SIZE],
                 emb_sample_len=emb_sample_len,
                 num_convs=num_convs,
-                is_residual=self.IS_RESIDUAL
+                is_residual=self.IS_RESIDUAL,
+                duration=config.HYPER_PARAMETERS[LearningHyperParameter.DURATION],
             )
 
         else:

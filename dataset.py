@@ -86,14 +86,13 @@ class MultiSourceDataset(Dataset):
             data, sr = self._load_audio(path_tmp, sr=self.sr, offset=offset, duration=self.sample_length, approx=True)
             # because the target channel is set to one and this is a stereo sound with two channel we do a mean across
             # the two channels to get the final output Channel
-            data = 0.5 * data[0:1, :] + 0.5 * data[1:, :]   #TODO to ask
+            data = 0.5 * data[0:1, :] + 0.5 * data[1:, :]
             assert data.shape == (
                 self.channels,
                 self.sample_length,
             ), f"Expected {(self.channels, self.sample_length)}, got {data.shape}"
             data_list.append(data)
         return np.concatenate(data_list, axis=0)
-
 
 
     def _load_audio(self, file, offset, duration, sr=None, resample=False, approx=False, time_base='samples',

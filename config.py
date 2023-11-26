@@ -6,11 +6,11 @@ class Configuration:
     """ Represents the configuration file of the simulation, containing all variables of the simulation. """
     def __init__(self):
 
-        self.IS_WANDB = True
-        self.IS_SWEEP = True
+        self.IS_WANDB = False
+        self.IS_SWEEP = False
         self.IS_TESTING = False
-        self.IS_TRAINING = False
-        self.IS_DEBUG = False
+        self.IS_TRAINING = True
+        self.IS_DEBUG = True
         self.IS_TRAINING_AE = True
 
         self.SEED = 0
@@ -36,9 +36,9 @@ class Configuration:
         self.HYPER_PARAMETERS[LearningHyperParameter.OPTIMIZER] = cst.Optimizers.ADAM.value
         self.HYPER_PARAMETERS[LearningHyperParameter.DROPOUT] = 0.1
         self.HYPER_PARAMETERS[LearningHyperParameter.DURATION] = 2
-        self.HYPER_PARAMETERS[LearningHyperParameter.LATENT_DIM] = 32
         self.HYPER_PARAMETERS[LearningHyperParameter.CODEBOOK_LENGTH] = 512
         self.HYPER_PARAMETERS[LearningHyperParameter.LSTM_LAYERS] = 2
+        self.HYPER_PARAMETERS[LearningHyperParameter.LATENT_DIM] = 32
         self.HYPER_PARAMETERS[LearningHyperParameter.IS_RESIDUAL] = True
 
         self.HYPER_PARAMETERS[LearningHyperParameter.EPOCHS] = 30
@@ -47,10 +47,10 @@ class Configuration:
         self.HYPER_PARAMETERS[LearningHyperParameter.SAMPLE_RATE] = 22050
         self.HYPER_PARAMETERS[LearningHyperParameter.SAMPLE_LENGTH] = self.HYPER_PARAMETERS[LearningHyperParameter.SAMPLE_RATE] * self.HYPER_PARAMETERS[LearningHyperParameter.DURATION]
         self.HYPER_PARAMETERS[LearningHyperParameter.KERNEL_SIZES] = [(1, 3), (1, 3), (1, 3), (1, 5), (4, 3)]
-        self.HYPER_PARAMETERS[LearningHyperParameter.STRIDES] = [(1, 5), (1, 5), (1,3), (1,3), (4,3)]
+        self.HYPER_PARAMETERS[LearningHyperParameter.STRIDES] = [(1, 5), (1, 5), (1, 3), (1, 3), (4, 3)]
         self.HYPER_PARAMETERS[LearningHyperParameter.PADDINGS] = [(0, 0), (0, 0), (0, 1), (0, 0), (0, 1)]
         self.HYPER_PARAMETERS[LearningHyperParameter.DILATIONS] = [(1, 2), (1, 2), (1, 2), (1, 2), (1, 2)]
         self.HYPER_PARAMETERS[LearningHyperParameter.HIDDEN_CHANNELS] = [1, 4, 8, 16, 32, 32]
-        self.HYPER_PARAMETERS[LearningHyperParameter.NUM_CONVS] = len(self.HYPER_PARAMETERS[LearningHyperParameter.KERNEL_SIZES])
+        self.HYPER_PARAMETERS[LearningHyperParameter.NUM_CONVS] = 3
         self.HYPER_PARAMETERS[LearningHyperParameter.BETA] = 0.25
         self.HYPER_PARAMETERS[LearningHyperParameter.AUG_SHIFT] = None
