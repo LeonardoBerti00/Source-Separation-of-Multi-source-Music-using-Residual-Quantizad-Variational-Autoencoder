@@ -139,7 +139,7 @@ class Decoder_CNN1D(nn.Module):
                     ResidualLayer(hidden_channels[-i - 1]) if is_residual else None,
                     )
                 )
-            elif i==end:
+            elif i==end-1:
                 after_conv_sample_len = compute_output_dim_convtranspose(input_dim=after_conv_sample_len,
                                                                          kernel_size=kernel_sizes[-i][1],
                                                                          stride=strides[-i][1],
@@ -178,20 +178,20 @@ class Decoder_CNN1D(nn.Module):
                     ResidualLayer(hidden_channels[-i - 1]) if is_residual else None,
                     )
                 )
-            print(after_conv_sample_len)
+            #print(after_conv_sample_len)
 
         self.Convs = nn.Sequential(*modules)
         self.batch_size = batch_size
 
 
     def forward(self, x):
-        print(f"\nstart decoding: {x.shape}")
+        #print(f"\nstart decoding: {x.shape}")
         x, _ = self.LSTM(x)
-        print(f"\nprint shape after lstm: {x.shape}")
+        #print(f"\nprint shape after lstm: {x.shape}")
         x = rearrange(x, 'b l c -> b c l')
-        print(f"\nprint shape after rearrange: {x.shape}")
+        #print(f"\nprint shape after rearrange: {x.shape}")
         x = self.Convs(x)
-        print(f"\nprint shape after convs: {x.shape}")
+        #print(f"\nprint shape after convs: {x.shape}")
 
         return x
 

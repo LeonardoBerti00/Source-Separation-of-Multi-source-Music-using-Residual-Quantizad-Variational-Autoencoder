@@ -156,9 +156,12 @@ class VQVAE(L.LightningModule):
         # Commitment loss is the mse between the quantized latent vector and the encoder output
         q_latent_loss = F.mse_loss(z_e.detach(), z_q)      # we train the codebook
         e_latent_loss = F.mse_loss(z_e, z_q.detach())      # we train the encoder
+        print(f"q_latent_loss: {q_latent_loss}")
+        print(f"e_latent_loss: {e_latent_loss}")
         commitment_loss = q_latent_loss + self.beta * e_latent_loss
         # Reconstruction loss is the mse between the input and the reconstruction
         recon_term = F.mse_loss(input, recon)
+        print(f"recon term: {recon_term}")
         return recon_term + commitment_loss
 
     def training_step(self, x, batch_idx):
@@ -239,11 +242,14 @@ class VQVAE(L.LightningModule):
     def on_test_end(self) -> None:
         loss = sum(self.test_losses) / len(self.test_losses)
         loss_ema = sum(self.test_ema_losses) / len(self.test_ema_losses)
+        snr = sum(self.test_snr) / len(self.test_snr)
         if self.IS_WANDB:
+            wandb.log({'snr': snr})
             wandb.log({'test_loss': loss})
             wandb.log({'test_ema_loss': loss_ema})
         print(f"\n test loss on epoch {self.current_epoch} is {loss}")
         print(f"\n test ema loss on epoch {self.current_epoch} is {loss_ema}")
+        print(f"\n test snr on epoch {self.current_epoch} is {snr}")
         #numpy.save(cst.RECON_DIR + "/test_reconstructions.npy", self.test_reconstructions)
         #numpy.save(cst.RECON_DIR + "/test_ema_reconstructions.npy", self.test_ema_reconstructions)
 

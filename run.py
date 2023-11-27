@@ -101,7 +101,7 @@ def run(config, accelerator, model=None):
         max_epochs=config.HYPER_PARAMETERS[cst.LearningHyperParameter.EPOCHS],
         profiler="advanced",
         callbacks=[
-            EarlyStopping(monitor="val_loss", mode="min", patience=10, verbose=True)
+            EarlyStopping(monitor="val_loss", mode="min", patience=10, verbose=False)
         ],
         num_sanity_val_steps=0,
     )
@@ -126,7 +126,6 @@ def run_wandb(config, accelerator, wandb_logger):
             wandb_instance.log({"model": config.CHOSEN_MODEL.name}, commit=False)
 
             config.WANDB_INSTANCE = wandb_instance
-            model_params = wandb.config
 
             if config.IS_SWEEP:
                 model_params = wandb.config
@@ -155,7 +154,7 @@ def run_wandb(config, accelerator, wandb_logger):
                 max_epochs=config.HYPER_PARAMETERS[cst.LearningHyperParameter.EPOCHS],
                 profiler="advanced",
                 callbacks=[
-                    EarlyStopping(monitor="val_loss", mode="min", patience=10, verbose=True),
+                    EarlyStopping(monitor="val_loss", mode="min", patience=5, verbose=False),
                     checkpoint_callback,
                 ],
                 num_sanity_val_steps=0,
@@ -175,7 +174,7 @@ def sweep_init(config):
         },
         'early_terminate': {
             'type': 'hyperband',
-            'min_iter': 15,
+            'min_iter': 10,
             'eta': 1.5
         },
         'run_cap': 10,

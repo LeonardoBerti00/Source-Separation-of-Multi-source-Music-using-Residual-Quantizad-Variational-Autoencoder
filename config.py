@@ -41,7 +41,7 @@ class Configuration:
         self.HYPER_PARAMETERS[LearningHyperParameter.LATENT_DIM] = 32
         self.HYPER_PARAMETERS[LearningHyperParameter.IS_RESIDUAL] = True
 
-        self.HYPER_PARAMETERS[LearningHyperParameter.EPOCHS] = 30
+        self.HYPER_PARAMETERS[LearningHyperParameter.EPOCHS] = 50
         self.HYPER_PARAMETERS[LearningHyperParameter.MIN_DURATION] = 12           # it's the minimum duration of a track
         self.HYPER_PARAMETERS[LearningHyperParameter.MAX_DURATION] = 640
         self.HYPER_PARAMETERS[LearningHyperParameter.SAMPLE_RATE] = 22050
