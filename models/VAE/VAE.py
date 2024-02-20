@@ -7,8 +7,8 @@ from torch_ema import ExponentialMovingAverage
 
 from constants import LearningHyperParameter
 from torch import nn
-from models.Encoders import Encoder_CNN2D, Encoder_CNN1D
-from models.Decoders import Decoder_CNN2D, Decoder_CNN1D
+from models.Encoders import Encoder
+from models.Decoders import Decoder
 from torchmetrics.audio import ScaleInvariantSignalNoiseRatio
 from utils.utils import compute_output_dim_conv, compute_output_dim_convtranspose
 
@@ -34,7 +34,7 @@ class VAE(L.LightningModule):
         paddings = config.HYPER_PARAMETERS[LearningHyperParameter.PADDINGS]
         dilations = config.HYPER_PARAMETERS[LearningHyperParameter.DILATIONS]
         strides = config.HYPER_PARAMETERS[LearningHyperParameter.STRIDES]
-        init_sample_len = config.HYPER_PARAMETERS[LearningHyperParameter.SAMPLE_LENGTH]
+        init_sample_len = cst.SAMPLE_LENGTH
         kernel_sizes = config.HYPER_PARAMETERS[LearningHyperParameter.KERNEL_SIZES]
         num_convs = config.HYPER_PARAMETERS[LearningHyperParameter.NUM_CONVS]
         self.ema = ExponentialMovingAverage(self.parameters(), decay=0.999)
@@ -42,68 +42,42 @@ class VAE(L.LightningModule):
         for i in range(num_convs):
             if i == 0:
                 emb_sample_len = compute_output_dim_conv(input_dim=init_sample_len,
-                                                    kernel_size=kernel_sizes[i][1],
-                                                    padding=paddings[i][1],
-                                                    dilation=dilations[i][1],
-                                                    stride=strides[i][1])
+                                                    kernel_size=kernel_sizes[i],
+                                                    padding=paddings[i],
+                                                    dilation=dilations[i],
+                                                    stride=strides[i])
             else:
                 emb_sample_len = compute_output_dim_conv(input_dim=emb_sample_len,
-                                                    kernel_size=kernel_sizes[i][1],
-                                                    padding=paddings[i][1],
-                                                    dilation=dilations[i][1],
-                                                    stride=strides[i][1])
+                                                    kernel_size=kernel_sizes[i],
+                                                    padding=paddings[i],
+                                                    dilation=dilations[i],
+                                                    stride=strides[i])
 
-        if config.IS_ONED:
-            self.encoder = Encoder_CNN1D(
-                input_size=config.HYPER_PARAMETERS[LearningHyperParameter.SAMPLE_LENGTH],
-                audio_srcs=config.AUDIO_SRCS,
-                hidden_channels=config.HYPER_PARAMETERS[LearningHyperParameter.HIDDEN_CHANNELS],
-                kernel_sizes=kernel_sizes,
-                strides=strides,
-                paddings=paddings,
-                dilations=dilations,
-                latent_dim=config.HYPER_PARAMETERS[LearningHyperParameter.LATENT_DIM],
-                lstm_layers=config.HYPER_PARAMETERS[LearningHyperParameter.LSTM_LAYERS],
-                num_convs=num_convs
-            )
-            self.decoder = Decoder_CNN1D(
-                audio_srcs=config.AUDIO_SRCS,
-                hidden_channels=config.HYPER_PARAMETERS[LearningHyperParameter.HIDDEN_CHANNELS],
-                kernel_sizes=kernel_sizes,
-                strides=strides,
-                paddings=paddings,
-                dilations=dilations,
-                latent_dim=config.HYPER_PARAMETERS[LearningHyperParameter.LATENT_DIM],
-                lstm_layers=config.HYPER_PARAMETERS[LearningHyperParameter.LSTM_LAYERS],
-                batch_size=config.HYPER_PARAMETERS[LearningHyperParameter.BATCH_SIZE],
-                emb_sample_len=emb_sample_len,
-                num_convs=num_convs
-            )
-
-        else:
-            self.encoder = Encoder_CNN2D(
-                input_size=config.HYPER_PARAMETERS[LearningHyperParameter.SAMPLE_LENGTH],
-                hidden_channels=config.HYPER_PARAMETERS[LearningHyperParameter.HIDDEN_CHANNELS],
-                kernel_sizes=kernel_sizes,
-                strides=strides,
-                paddings=paddings,
-                dilations=dilations,
-                latent_dim=config.HYPER_PARAMETERS[LearningHyperParameter.LATENT_DIM],
-                lstm_layers=config.HYPER_PARAMETERS[LearningHyperParameter.LSTM_LAYERS],
-                num_convs=num_convs
-            )
-            self.decoder = Decoder_CNN2D(
-                hidden_channels=config.HYPER_PARAMETERS[LearningHyperParameter.HIDDEN_CHANNELS],
-                kernel_sizes=kernel_sizes,
-                strides=strides,
-                paddings=paddings,
-                dilations=dilations,
-                latent_dim=config.HYPER_PARAMETERS[LearningHyperParameter.LATENT_DIM],
-                lstm_layers=config.HYPER_PARAMETERS[LearningHyperParameter.LSTM_LAYERS],
-                batch_size=config.HYPER_PARAMETERS[LearningHyperParameter.BATCH_SIZE],
-                emb_sample_len=emb_sample_len,
-                num_convs=num_convs
-            )
+        self.encoder = Encoder(
+            input_size=init_sample_len,
+            audio_srcs=config.AUDIO_SRCS,
+            hidden_channels=config.HYPER_PARAMETERS[LearningHyperParameter.HIDDEN_CHANNELS],
+            kernel_sizes=kernel_sizes,
+            strides=strides,
+            paddings=paddings,
+            dilations=dilations,
+            latent_dim=config.HYPER_PARAMETERS[LearningHyperParameter.LATENT_DIM],
+            lstm_layers=config.HYPER_PARAMETERS[LearningHyperParameter.LSTM_LAYERS],
+            num_convs=num_convs
+        )
+        self.decoder = Decoder(
+            audio_srcs=config.AUDIO_SRCS,
+            hidden_channels=config.HYPER_PARAMETERS[LearningHyperParameter.HIDDEN_CHANNELS],
+            kernel_sizes=kernel_sizes,
+            strides=strides,
+            paddings=paddings,
+            dilations=dilations,
+            latent_dim=config.HYPER_PARAMETERS[LearningHyperParameter.LATENT_DIM],
+            lstm_layers=config.HYPER_PARAMETERS[LearningHyperParameter.LSTM_LAYERS],
+            batch_size=config.HYPER_PARAMETERS[LearningHyperParameter.BATCH_SIZE],
+            emb_sample_len=emb_sample_len,
+            num_convs=num_convs
+        )
 
         self.fc = nn.Linear(in_features=self.latent_dim*emb_sample_len,
                                out_features=2*self.latent_dim*emb_sample_len)

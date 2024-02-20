@@ -4,68 +4,76 @@ import wandb
 from lightning.pytorch.loggers import WandbLogger
 import constants as cst
 from dataset import DataModule, MultiSourceDataset
-from config import Configuration
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 import torch
 from collections import namedtuple
+from models.LitAutoencoder import LitAutoencoder
 
-from models.LitModel import LitModel
+from models.RQTransformer.RQTransformer import RQTransformer
 from models.VQVAE.VQVAE_hp import HP_VQVAE, HP_VQVAE_FIXED
-from utils.utils_models import pick_autoencoder
+from models.RQVAE.RQVAE_hp import HP_RQVAE, HP_RQVAE_FIXED
+
 
 HP_SEARCH_TYPES = namedtuple('HPSearchTypes', ("sweep", "fixed"))
 HP_DICT_MODEL = {
-    cst.Autoencoders.VQVAE: HP_SEARCH_TYPES(HP_VQVAE, HP_VQVAE_FIXED)
+    cst.Autoencoders.VQVAE: HP_SEARCH_TYPES(HP_VQVAE, HP_VQVAE_FIXED),
+    cst.Autoencoders.RQVAE: HP_SEARCH_TYPES(HP_RQVAE, HP_RQVAE_FIXED)
 }
+
 
 def train(config, trainer):
     print_setup(config)
 
     train_set = MultiSourceDataset(
-        sr=config.HYPER_PARAMETERS[cst.LearningHyperParameter.SAMPLE_RATE],
+        sr=cst.SAMPLE_RATE,
         channels=cst.CHANNEL_SIZE,
-        min_duration=config.HYPER_PARAMETERS[cst.LearningHyperParameter.MIN_DURATION],
-        max_duration=config.HYPER_PARAMETERS[cst.LearningHyperParameter.MAX_DURATION],
+        min_duration=cst.MIN_DURATION,
+        max_duration=cst.MAX_DURATION,
         aug_shift=config.HYPER_PARAMETERS[cst.LearningHyperParameter.AUG_SHIFT],
-        sample_length=config.HYPER_PARAMETERS[cst.LearningHyperParameter.SAMPLE_LENGTH],
+        sample_length=cst.SAMPLE_LENGTH,
         audio_files_dir=cst.AUDIO_FILES_DIR_TRAIN,
         stems=cst.STEMS,
+        z_score=config.HYPER_PARAMETERS[cst.LearningHyperParameter.Z_SCORE]
     )
 
     val_set = MultiSourceDataset(
-        sr=config.HYPER_PARAMETERS[cst.LearningHyperParameter.SAMPLE_RATE],
+        sr=cst.SAMPLE_RATE,
         channels=cst.CHANNEL_SIZE,
-        min_duration=config.HYPER_PARAMETERS[cst.LearningHyperParameter.MIN_DURATION],
-        max_duration=config.HYPER_PARAMETERS[cst.LearningHyperParameter.MAX_DURATION],
+        min_duration=cst.MIN_DURATION,
+        max_duration=cst.MAX_DURATION,
         aug_shift=config.HYPER_PARAMETERS[cst.LearningHyperParameter.AUG_SHIFT],
-        sample_length=config.HYPER_PARAMETERS[cst.LearningHyperParameter.SAMPLE_LENGTH],
+        sample_length=cst.SAMPLE_LENGTH,
         audio_files_dir=cst.AUDIO_FILES_DIR_VAL,
         stems=cst.STEMS,
+        z_score=config.HYPER_PARAMETERS[cst.LearningHyperParameter.Z_SCORE]
     )
 
     test_set = MultiSourceDataset(
-        sr=config.HYPER_PARAMETERS[cst.LearningHyperParameter.SAMPLE_RATE],
+        sr=cst.SAMPLE_RATE,
         channels=cst.CHANNEL_SIZE,
-        min_duration=config.HYPER_PARAMETERS[cst.LearningHyperParameter.MIN_DURATION],
-        max_duration=config.HYPER_PARAMETERS[cst.LearningHyperParameter.MAX_DURATION],
+        min_duration=cst.MIN_DURATION,
+        max_duration=cst.MAX_DURATION,
         aug_shift=config.HYPER_PARAMETERS[cst.LearningHyperParameter.AUG_SHIFT],
-        sample_length=config.HYPER_PARAMETERS[cst.LearningHyperParameter.SAMPLE_LENGTH],
+        sample_length=cst.SAMPLE_LENGTH,
         audio_files_dir=cst.AUDIO_FILES_DIR_TEST,
         stems=cst.STEMS,
+        z_score=config.HYPER_PARAMETERS[cst.LearningHyperParameter.Z_SCORE]
     )
 
-    data_module = DataModule(train_set, val_set, test_set, batch_size=config.HYPER_PARAMETERS[cst.LearningHyperParameter.BATCH_SIZE], num_workers=16)
+    data_module = DataModule(
+        train_dataset=train_set, 
+        val_dataset=val_set, 
+        test_dataset=test_set, 
+        batch_size=config.HYPER_PARAMETERS[cst.LearningHyperParameter.BATCH_SIZE], 
+        num_workers=8
+    )
+
     train_dataloader, val_dataloader, test_dataloader = data_module.train_dataloader(), data_module.val_dataloader(), data_module.test_dataloader()
 
     if config.IS_TRAINING_AE:
-        model = pick_autoencoder(config, config.CHOSEN_AE.name).to(cst.DEVICE, torch.float32)
+        model = LitAutoencoder(config).to(cst.DEVICE, torch.float32)
     else:
-        model = LitModel(
-            config=config,
-            val_num_steps=val_set.__len__(),
-            test_num_steps=test_set.__len__(),
-            trainer=trainer
-        ).to(cst.DEVICE, torch.float32)
+        model = RQTransformer(config=config, test_num_steps=test_set.__len__()).to(cst.DEVICE, torch.float32)
 
     print("\nstarting training\n")
     trainer.fit(model, train_dataloader, val_dataloader)
@@ -75,17 +83,17 @@ def test(config, trainer, model):
     print_setup(config)
 
     test_set = MultiSourceDataset(
-        sr=config.HYPER_PARAMETERS[cst.LearningHyperParameter.SAMPLE_RATE],
+        sr=cst.SAMPLE_RATE,
         channels=cst.CHANNEL_SIZE,
-        min_duration=config.HYPER_PARAMETERS[cst.LearningHyperParameter.MIN_DURATION],
-        max_duration=config.HYPER_PARAMETERS[cst.LearningHyperParameter.MAX_DURATION],
+        min_duration=cst.MIN_DURATION,
+        max_duration=cst.MAX_DURATION,
         aug_shift=config.HYPER_PARAMETERS[cst.LearningHyperParameter.AUG_SHIFT],
-        sample_length=config.HYPER_PARAMETERS[cst.LearningHyperParameter.SAMPLE_LENGTH],
+        sample_length=cst.SAMPLE_LENGTH,
         audio_files_dir=cst.AUDIO_FILES_DIR_TEST,
         stems=cst.STEMS,
     )
 
-    data_module = DataModule(None, None, test_set, batch_size=config.HYPER_PARAMETERS[cst.LearningHyperParameter.BATCH_SIZE], num_workers=16)
+    data_module = DataModule(None, None, test_set, batch_size=config.HYPER_PARAMETERS[cst.LearningHyperParameter.BATCH_SIZE], num_workers=8)
 
     test_dataloader = data_module.test_dataloader()
 
@@ -99,11 +107,12 @@ def run(config, accelerator, model=None):
         accelerator=accelerator,
         precision=cst.PRECISION,
         max_epochs=config.HYPER_PARAMETERS[cst.LearningHyperParameter.EPOCHS],
-        profiler="advanced",
         callbacks=[
-            EarlyStopping(monitor="val_loss", mode="min", patience=10, verbose=False)
+            EarlyStopping(monitor="val_snr", mode="max", patience=4, verbose=False)
         ],
         num_sanity_val_steps=0,
+        detect_anomaly=False,
+        profiler="simple"
     )
     if (config.IS_TESTING):
         test(config, trainer, model)
@@ -111,21 +120,28 @@ def run(config, accelerator, model=None):
         train(config, trainer)
 
 
-def run_wandb(config, accelerator, wandb_logger):
+def run_wandb(config, accelerator):
     def wandb_sweep_callback():
+        wandb_logger = WandbLogger(project=cst.PROJECT_NAME, log_model=False, save_dir=cst.DIR_SAVED_MODEL)
         run_name = None
         if not config.IS_SWEEP:
             run_name = ""
             model_params = HP_DICT_MODEL[config.CHOSEN_MODEL].fixed
             for param in cst.LearningHyperParameter:
                 if param.value in model_params:
-                    run_name += str(param.value) + "_" + str(model_params[param.value]) + "_"
+                    run_name += str(param.value[:3]) + "_" + str(model_params[param.value]) + "_"
 
         with wandb.init(project=cst.PROJECT_NAME, name=run_name) as wandb_instance:
             # log simulation details in WANDB console
             wandb_instance.log({"model": config.CHOSEN_MODEL.name}, commit=False)
-
-            config.WANDB_INSTANCE = wandb_instance
+            wandb_instance.log({"sr": cst.SAMPLE_RATE}, commit=False)
+            wandb_instance.log({"conv_setup": config.HYPER_PARAMETERS[cst.LearningHyperParameter.CONV_SETUP]}, commit=False)
+            wandb_instance.log({"batch size": config.HYPER_PARAMETERS[cst.LearningHyperParameter.BATCH_SIZE]}, commit=False)
+            wandb_instance.log({"dropout": config.HYPER_PARAMETERS[cst.LearningHyperParameter.DROPOUT]}, commit=False)
+            wandb_instance.log({"lstm layers": config.HYPER_PARAMETERS[cst.LearningHyperParameter.LSTM_LAYERS]}, commit=False)
+            wandb_instance.log({"latent dim": config.HYPER_PARAMETERS[cst.LearningHyperParameter.HIDDEN_CHANNELS][config.HYPER_PARAMETERS[cst.LearningHyperParameter.CONV_SETUP]][-1]}, commit=False)
+            wandb_instance.log({"num convs": config.HYPER_PARAMETERS[cst.LearningHyperParameter.NUM_CONVS]}, commit=False)
+            wandb_instance.log({"sample rate": cst.SAMPLE_RATE}, commit=False)
 
             if config.IS_SWEEP:
                 model_params = wandb.config
@@ -135,52 +151,46 @@ def run_wandb(config, accelerator, wandb_logger):
             for param in cst.LearningHyperParameter:
                 if param.value in model_params:
                     config.HYPER_PARAMETERS[param] = model_params[param.value]
-                    wandb_instance_name += str(param.value) + "_" + str(model_params[param.value]) + "_"
+                    wandb_instance_name += str(param.value[:3]) + "_" + str(model_params[param.value]) + "_"
 
-            checkpoint_callback = ModelCheckpoint(
-                dirpath=cst.DIR_SAVED_MODEL,
-                monitor="val_loss",
-                mode="min",
-                save_last=True,
-                save_top_k=1,
-                every_n_epochs=1,
-                filename=str(config.CHOSEN_MODEL.name)+"/{val_loss:.2f}_{epoch}_"+wandb_instance_name
-            )
-            checkpoint_callback.CHECKPOINT_NAME_LAST = str(config.CHOSEN_MODEL.name)+"/{val_loss:.2f}_{epoch}_"+wandb_instance_name+"_last"
+            sr = cst.SAMPLE_RATE
+            conv_setup = config.HYPER_PARAMETERS[cst.LearningHyperParameter.CONV_SETUP]
+            config.FILENAME_CKPT = "convsetup_" + str(conv_setup) + "_sr_" + str(sr) + "_model_" + str(config.CHOSEN_MODEL.name) + "_ckpt.ckpt"
 
             trainer = L.Trainer(
                 accelerator=accelerator,
                 precision=cst.PRECISION,
                 max_epochs=config.HYPER_PARAMETERS[cst.LearningHyperParameter.EPOCHS],
-                profiler="advanced",
-                callbacks=[
-                    EarlyStopping(monitor="val_loss", mode="min", patience=5, verbose=False),
-                    checkpoint_callback,
-                ],
+                callbacks=[EarlyStopping(monitor="val_snr", mode="max", patience=4, verbose=True, min_delta=0.001)],
                 num_sanity_val_steps=0,
                 logger=wandb_logger,
+                detect_anomaly=False,
             )
             train(config, trainer)
+
     return wandb_sweep_callback
 
 
 def sweep_init(config):
-    #wandb.login("d29d51017f4231b5149d36ad242526b374c9c60a")
+    wandb.login(key="d29d51017f4231b5149d36ad242526b374c9c60a")
     sweep_config = {
-        'method': 'bayes',
+        'method': 'grid',
         'metric': {
             'goal': 'minimize',
-            'name': 'val_loss'
+            'name': 'val_ema_loss'
         },
         'early_terminate': {
             'type': 'hyperband',
             'min_iter': 10,
             'eta': 1.5
         },
-        'run_cap': 10,
+        'run_cap': 100,
         'parameters': {**HP_DICT_MODEL[config.CHOSEN_MODEL].sweep}
     }
     return sweep_config
 
 def print_setup(config):
     print(f"Chosen model: {config.CHOSEN_MODEL.name}")
+    print(f"Duration: {cst.DURATION}")
+    print(f"Sample rate: {cst.SAMPLE_RATE}")
+    print(f"Convolution setup: {config.HYPER_PARAMETERS[cst.LearningHyperParameter.CONV_SETUP]}")

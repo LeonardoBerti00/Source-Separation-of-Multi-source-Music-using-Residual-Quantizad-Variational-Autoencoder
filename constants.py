@@ -1,5 +1,4 @@
 from enum import Enum
-
 import torch
 
 
@@ -10,9 +9,7 @@ class LearningHyperParameter(str, Enum):
     BATCH_SIZE = "batch_size"
     DROPOUT = "dropout"
     SAMPLE_RATE = "sample_rate"
-    DURATION = "duration"
     SAMPLE_LENGTH = "sample_length"
-    CHANNEL_SIZE = "channel_size"
     AUG_SHIFT = "aug_shift"
     LATENT_DIM = "latent_dim"
     HIDDEN_CHANNELS = "hidden_channels"
@@ -24,9 +21,16 @@ class LearningHyperParameter(str, Enum):
     LSTM_LAYERS = "lstm_layers"
     BETA = "beta"
     NUM_CONVS = "num_convs"
-    MIN_DURATION = "min_duration"
-    MAX_DURATION = "max_duration"
     IS_RESIDUAL = "is_residual"
+    INIT_KMEANS = "init_kmeans"
+    CONV_SETUP = "conv_setup"
+    MULTI_SPECTRAL_RECON_LOSS_WEIGHT = "multi_spectral_recon_loss_weight"
+    COMMITMENT_LOSS_WEIGHT = "commitment_loss_weight"
+    RES_TYPE = "res_type"
+    NUM_QUANTIZERS = "num_quantizers"
+    NUM_HEADS = "num_heads"
+    NUM_TRANSFORMER_LAYERS = "num_transformer_layers"
+    Z_SCORE = "z_score"
 
 
 class Optimizers(Enum):
@@ -41,24 +45,36 @@ class Autoencoders(str, Enum):
 
 
 class Transformers(str, Enum):
-    TRANSFORMER = "Transformer"
+    RQTRANSFORMER = "RQTransformer"
 
 
 SEED = 0
 
 PRECISION = 32
 CHANNEL_SIZE = 1
+DURATION = 5
+MIN_DURATION = 12
+MAX_DURATION = 640
+SAMPLE_RATE = 22050
+SAMPLE_LENGTH = SAMPLE_RATE * DURATION
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-AUDIO_FILES_DIR_TRAIN = 'data/Slakh/slakh2100/train'
-AUDIO_FILES_DIR_VAL = 'data/Slakh/slakh2100/validation'
-AUDIO_FILES_DIR_TEST = 'data/Slakh/slakh2100/test'
-#AUDIO_FILES_DIR_TRAIN = 'data/train'
-#AUDIO_FILES_DIR_VAL = 'data/validation'
-#AUDIO_FILES_DIR_TEST = 'data/test'
+#DEVICE = 'cpu'
+#AUDIO_FILES_DIR_TRAIN = 'data/Slakh/slakh2100/train'
+#AUDIO_FILES_DIR_VAL = 'data/Slakh/slakh2100/validation'
+#AUDIO_FILES_DIR_TEST = 'data/Slakh/slakh2100/test'
+AUDIO_FILES_DIR_TRAIN = 'data/babySlakh/train'
+AUDIO_FILES_DIR_VAL = 'data/babySlakh/validation'
+AUDIO_FILES_DIR_TEST = 'data/babySlakh/test'
 STEMS = ["bass", "drums", "guitar", "piano"]
-WANDB_DIR = "data/wandb"
 DIR_SAVED_MODEL = "data/checkpoints"
 DATA_DIR = "data"
 RECON_DIR = "data/reconstructions"
 
-PROJECT_NAME = "MMLM"
+PROJECT_NAME = "MMLM_AE"
+
+MEAN = 122.759
+STD = 2359.9309
+
+MULTI_SPECTRAL_N_FFTS = 512
+MULTI_SPECTRAL_N_MELS = 64
+MULTI_SPECTRAL_WINDOW_POWERS = tuple(range(6, 12))

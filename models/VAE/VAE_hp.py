@@ -7,7 +7,6 @@ HP_VAE = {
     cst.LearningHyperParameter.OPTIMIZER.value: {'values': [cst.Optimizers.ADAM.value, cst.Optimizers.LION.value]},
     cst.LearningHyperParameter.LATENT_DIM.value: {'values': [32, 64, 128]},
     cst.LearningHyperParameter.LSTM_LAYERS.value: {'values': [1, 2]},
-    cst.LearningHyperParameter.DURATION.value: {'values': [1, 2]},
 }
 
 HP_VAE_FIXED = {
@@ -17,5 +16,4 @@ HP_VAE_FIXED = {
     cst.LearningHyperParameter.OPTIMIZER.value: cst.Optimizers.ADAM.value,
     cst.LearningHyperParameter.LATENT_DIM.value: 32,
     cst.LearningHyperParameter.LSTM_LAYERS.value: 2,
-    cst.LearningHyperParameter.DURATION.value: 1,
 }

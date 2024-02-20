@@ -6,9 +6,7 @@ import librosa
 import torch
 from torch.utils.data import Dataset, DataLoader
 import pytorch_lightning as pl
-
-def _identity(x):
-  return x
+import constants as cst
 
 def get_duration_sec(file, cache=False):
     try:
@@ -25,9 +23,9 @@ def get_duration_sec(file, cache=False):
         return duration
 
 
-#class taken from https://github.com/gladia-research-group/multi-source-diffusion-models/blob/main/main/data.py
+#class ported from https://github.com/gladia-research-group/multi-source-diffusion-models/blob/main/main/data.py
 class MultiSourceDataset(Dataset):
-    def __init__(self, sr, channels, min_duration, max_duration, aug_shift, sample_length, audio_files_dir, stems):
+    def __init__(self, sr, channels, min_duration, max_duration, aug_shift, sample_length, audio_files_dir, stems, z_score):
         super().__init__()
         self.sr = sr
         self.channels = channels
@@ -36,6 +34,7 @@ class MultiSourceDataset(Dataset):
         self.sample_length = sample_length
         self.audio_files_dir = audio_files_dir
         self.stems = stems
+        self.z_score = z_score
         assert (
                 sample_length / sr < self.min_duration
         ), f"Sample length {sample_length} per sr {sr} ({sample_length / sr:.2f}) should be shorter than min duration {self.min_duration}"
@@ -45,7 +44,7 @@ class MultiSourceDataset(Dataset):
     def init_dataset(self):
         # Load list of tracks and starts/durations
         tracks = os.listdir(self.audio_files_dir)
-        print(f"Found {len(tracks)} tracks.")
+        #print(f"Found {len(tracks)} tracks.")
         self.filter(tracks)
 
 
@@ -53,8 +52,12 @@ class MultiSourceDataset(Dataset):
         index, offset = self.get_index_offset(item)
         wav = self.get_song_chunk(index, offset)
         # print(f"item: {item}, track: {index}, track: {self.tracks[index]},  offset: {offset},  cumsum: {self.cumsum[index]}, duration: {self.durations[index]}")
-        return torch.from_numpy(wav)
-
+        if self.z_score:
+            return (torch.from_numpy(wav) - cst.MEAN) / cst.STD
+        else:
+            return torch.from_numpy(wav)
+        
+    
     def get_index_offset(self, item):
         # For a given dataset item and shift, return song index and offset within song
         half_interval = self.sample_length // 2
@@ -107,7 +110,7 @@ class MultiSourceDataset(Dataset):
         if approx:
             if offset + duration > audio_duration * sr:
                 # Move back one window. Cap at audio_duration
-                offset = np.min(audio_duration * sr - duration, offset - duration)
+                offset = min(audio_duration * sr - duration, offset - duration)
         else:
             if check_duration:
                 assert offset + duration <= audio_duration * sr, f'End {offset + duration} beyond duration {audio_duration * sr}'
@@ -138,8 +141,6 @@ class MultiSourceDataset(Dataset):
     def __len__(self):
         return int(np.floor(self.cumsum[-1] / self.sample_length))
 
-
-
     def filter(self, tracks):
         # Remove files too short or too long
         keep = []
@@ -167,14 +168,14 @@ class MultiSourceDataset(Dataset):
 
             # skip if in the track the different sources have different lengths
             if not (durations_track == durations_track[0]).all():
-                print(f"{track} skipped because sources are not aligned!")
-                print(durations_track)
+                #print(f"{track} skipped because sources are not aligned!")
+                #print(durations_track)
                 continue
             keep.append(track)
             durations.append(durations_track[0])
 
-        print(f"self.sr={self.sr}, min: {self.min_duration}, max: {self.max_duration}")
-        print(f"Keeping {len(keep)} of {len(tracks)} tracks")
+        #print(f"self.sr={self.sr}, min: {self.min_duration}, max: {self.max_duration}")
+        #print(f"Keeping {len(keep)} of {len(tracks)} tracks")
         self.tracks = keep
         self.durations = np.array(durations)
         self.cumsum = np.cumsum(self.durations)
@@ -202,7 +203,7 @@ class DataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=True,
-            shuffle=False,
+            shuffle=True,
             persistent_workers=True
         )
 
@@ -218,7 +219,7 @@ class DataModule(pl.LightningDataModule):
 
     def test_dataloader(self) -> DataLoader:
         return DataLoader(
-            dataset=self.data_val,
+            dataset=self.data_test,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=True,
