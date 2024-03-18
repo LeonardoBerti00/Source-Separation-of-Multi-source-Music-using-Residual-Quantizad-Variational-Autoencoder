@@ -1,5 +1,6 @@
 import math
 import os
+import random
 import av
 import numpy as np
 import librosa
@@ -7,6 +8,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import pytorch_lightning as pl
 import constants as cst
+from utils.utils import save_audio
 
 def get_duration_sec(file, cache=False):
     try:
@@ -89,12 +91,16 @@ class MultiSourceDataset(Dataset):
             data, sr = self._load_audio(path_tmp, sr=self.sr, offset=offset, duration=self.sample_length, approx=True)
             # because the target channel is set to one and this is a stereo sound with two channel we do a mean across
             # the two channels to get the final output Channel
+            #save_audio(data, f"{track_name}_{stem}_original")
             data = 0.5 * data[0:1, :] + 0.5 * data[1:, :]
+            #save_audio(data, f"{track_name}_{stem}_onechannel")
+            #save_audio((data-cst.MEAN) / cst.STD, f"{track_name}_{stem}_zscore")
             assert data.shape == (
                 self.channels,
                 self.sample_length,
             ), f"Expected {(self.channels, self.sample_length)}, got {data.shape}"
             data_list.append(data)
+
         return np.concatenate(data_list, axis=0)
 
 
@@ -146,8 +152,7 @@ class MultiSourceDataset(Dataset):
         keep = []
         durations = []
         for track in tracks:
-            if track == "Track00021":
-                pass
+
             track_dir = os.path.join(self.audio_files_dir, track)
             files = librosa.util.find_files(f"{track_dir}", ext=["mp3", "opus", "m4a", "aac", "wav"])
 
@@ -196,6 +201,8 @@ class DataModule(pl.LightningDataModule):
         self.data_test = test_dataset
         self.batch_size = batch_size
         self.num_workers = num_workers
+        self.g = torch.Generator()
+        self.g.manual_seed(cst.SEED)
 
     def train_dataloader(self) -> DataLoader:
         return DataLoader(
@@ -204,25 +211,37 @@ class DataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=True,
             shuffle=True,
-            persistent_workers=True
+            persistent_workers=True,
+            worker_init_fn=seed_worker,
+            generator=self.g
         )
 
     def val_dataloader(self) -> DataLoader:
         return DataLoader(
             dataset=self.data_val,
-            batch_size=self.batch_size,
+            batch_size=self.batch_size*2,
             num_workers=self.num_workers,
             pin_memory=True,
             shuffle=False,
-            persistent_workers=True
+            persistent_workers=True,
+            worker_init_fn=seed_worker,
+            generator=self.g
         )
 
     def test_dataloader(self) -> DataLoader:
         return DataLoader(
             dataset=self.data_test,
-            batch_size=self.batch_size,
+            batch_size=1,
             num_workers=self.num_workers,
             pin_memory=True,
             shuffle=False,
-            persistent_workers=True
+            persistent_workers=True,
+            worker_init_fn=seed_worker,
+            generator=self.g
         )
+    
+
+def seed_worker(worker_id):
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)

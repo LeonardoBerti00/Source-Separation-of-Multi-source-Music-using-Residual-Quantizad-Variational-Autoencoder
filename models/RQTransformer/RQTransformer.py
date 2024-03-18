@@ -3,6 +3,7 @@ import numpy
 from config import Configuration
 import torch
 from torch.nn import functional as F
+from torch import nn
 import lightning as L
 import constants as cst
 from constants import LearningHyperParameter
@@ -32,6 +33,7 @@ class RQTransformer(L.LightningModule):
         self.AE = self.LitModel.AE
         self.emb_sample_len = int(self.AE.emb_sample_len)
         self.latent_dim = int(self.AE.latent_dim)
+        self.codebook_length = int(self.AE.codebook_length)
         if config.CHOSEN_AE == cst.Autoencoders.RQVAE:
             self.num_quantizers = int(self.AE.num_quantizers)
         else:
@@ -53,52 +55,63 @@ class RQTransformer(L.LightningModule):
             num_layers=config.HYPER_PARAMETERS[LearningHyperParameter.NUM_TRANSFORMER_LAYERS],
             dropout=config.HYPER_PARAMETERS[LearningHyperParameter.DROPOUT]
         )
+        self.fc = torch.nn.Linear(self.latent_dim, self.codebook_length)
+        self.loss = nn.NLLLoss(reduction='mean')
+
 
     def forward(self, x, is_train):
         #adding channel dimension
         x = rearrange(x, 'b l-> b 1 l')
         z_e = self.AE.encoder(x)
         # z_e shape: (batch_size, emb_sample_len, hidden_channels)
-        u = torch.zeros(z_e.shape[0], self.emb_sample_len, self.latent_dim, device=cst.DEVICE)
         v = torch.zeros(z_e.shape[0], self.emb_sample_len, self.num_quantizers, self.latent_dim, device=cst.DEVICE)
-        p = torch.zeros(z_e.shape[0], self.emb_sample_len, self.num_quantizers, device=cst.DEVICE)
-        for t in range(0, self.emb_sample_len):
-            if t == 0:
-                u[:, t] = self.start_seq
-            else:
-                # preparing the input for the spatial transformer
-                _, stacked_quantizations = self.AE.quantize(z_e[:, t-1], num_quant=self.num_quantizers, is_train=False)
-                sum_quantizations = torch.sum(stacked_quantizations, dim=0)
-                u[:, t] = self.pos_emb_t[t] + sum_quantizations
-            mask = self.get_mask(t, self.emb_sample_len)
-            h_t = self.spatial_transformer(u, mask)[:, t]
-            for d in range(self.num_quantizers):
-                if d == 0:
-                    v[:, t, d] = self.pos_emb_d[d] + h_t
-                else:
-                    _, stacked_quantizations = self.AE.quantize(z_e[:, t], num_quant=d, is_train=False)
-                    sum_quantizations = torch.sum(stacked_quantizations, dim=0)
-                    v[:, t, d] = self.pos_emb_d[d] + sum_quantizations
-                # depth transformer predicts the next code
-                p[:, t, d] = self.depth_transformer(v, mask)
-        return p
+        p = torch.zeros(z_e.shape[0], self.emb_sample_len, self.num_quantizers, self.codebook_length, device=cst.DEVICE)
+        
+        # quantize the input
+        stacked_quantizations, encodings, _ = self.AE.quantize(z_e, num_quant=self.num_quantizers, is_train=False)
+        encodings = rearrange(encodings, 'n (b l) -> b l n', b=x.shape[0])
+        cumsum_quantizations = torch.cumsum(stacked_quantizations, dim=0)
+        sum_quantizations = cumsum_quantizations[-1]
+        final_z_q = rearrange(sum_quantizations, '(b l) c -> b l c', b=x.shape[0]).contiguous()
 
-    def get_mask(self, t, emb_sample_len):
-        mask = torch.zeros(emb_sample_len, emb_sample_len, device=cst.DEVICE, requires_grad=False)
-        row_mask = torch.arange(emb_sample_len).unsqueeze(1) > t
-        col_mask = torch.arange(emb_sample_len).unsqueeze(0) > t
+        # preparing the input for the spatial transformer
+        # first element of the sequence is the start sequence
+        # the rest of the elements are the sum of the quantizations
+        first_token_spatial = self.pos_emb_t[0] + self.start_seq
+        tokens_spatial = self.pos_emb_t[1:] + final_z_q[:, :-1]
+        tokens_spatial = torch.cat((first_token_spatial.unsqueeze(0), tokens_spatial), dim=0)
+        mask_spatial = self.get_mask(self.emb_sample_len)
+        # spatial transformer generates the context vector
+        h = self.spatial_transformer(tokens_spatial, mask_spatial)
 
-        # Combine the masks using logical OR
-        indexes = row_mask | col_mask
+        # preparing the input for the depth transformer
+        first_token_depth = torch.add(self.pos_emb_d[0], h)
+        cum_sum_residuals = rearrange(cumsum_quantizations, 'n (b l) c -> b l n c', b=x.shape[0]).contiguous()
+        tokens_depth = self.pos_emb_d[1:] + cum_sum_residuals[:, :, :-1]
+        tokens_depth = torch.cat((first_token_depth.unsqueeze(0), tokens_depth), dim=0)
 
-        # Apply the mask to the matrix
-        mask[indexes] = float('-inf')
+        # depth transformer predicts the next code and then we get the log probabilities
+        mask_depth = self.get_mask(self.num_quantizers)
+        tokens_depth = rearrange(tokens_depth, 'b l n c -> (b l) n c')
+        out_depth = self.depth_transformer(v, mask_depth)
+        out_depth = rearrange(out_depth, '(b l) n c -> b l n c', b=x.shape[0])
+        p = F.log_softmax(self.fc(out_depth), dim=-1)
+
+        return p, encodings
+
+
+    def get_mask(self, emb_sample_len):
+        # upper triangular mask
+        mask = torch.ones(emb_sample_len, emb_sample_len, device=cst.DEVICE, requires_grad=False)
+        mask = mask.triu(diagonal=1)
+        mask = mask.masked_fill(mask == 1, float('-inf'))
         return mask
+
 
     def inference(self):
         u = torch.zeros(1, self.emb_sample_len, self.latent_dim, device=cst.DEVICE)
         v = torch.zeros(1, self.emb_sample_len, self.num_quantizers, self.latent_dim, device=cst.DEVICE)
-        p = torch.zeros(1, self.emb_sample_len, self.num_quantizers, device=cst.DEVICE)
+        p = torch.zeros(1, self.emb_sample_len, self.num_quantizers, device=cst.DEVICE, dtype=torch.long)
         z_q = torch.zeros(1, self.emb_sample_len, self.num_quantizers, self.latent_dim, device=cst.DEVICE)
         for t in range(0, self.emb_sample_len):
             if t == 0:
@@ -107,7 +120,8 @@ class RQTransformer(L.LightningModule):
                 # preparing the input for the spatial transformer
                 sum_quantizations = torch.sum(z_q, dim=2)
                 u[:, t] = self.pos_emb_t[t] + sum_quantizations
-            h_t = self.spatial_transformer(u, t, is_train=False)
+            mask_spatial = self.get_mask(self.emb_sample_len)
+            h_t = self.spatial_transformer(u, mask_spatial)[:, t]
             for d in range(self.num_quantizers):
                 if d == 0:
                     v[:, t, d] = self.pos_emb_d[d] + h_t
@@ -115,14 +129,16 @@ class RQTransformer(L.LightningModule):
                     sum_quantizations = torch.sum(z_q, dim=2)
                     v[:, t, d] = self.pos_emb_d[d] + sum_quantizations
                 # depth transformer predicts the next code
-                p[:, t, d] = self.depth_transformer(v, t, d, is_train=False)
-                encodings = F.one_hot(p[:, t, d], self.AE.codebook_length).float()
+                mask_depth = self.get_mask(self.num_quantizers)
+                depth_out = self.depth_transformer(v[:, t, :], mask_depth)[:, d]
+                prob = F.softmax(self.fc(depth_out), dim=-1)
+                p[:, t, d] = torch.argmax(prob, dim=-1)
+                encodings = F.one_hot(p[:, t, d], self.codebook_length).float()
                 # maybe encodings need unsqueeze
                 z_q[:, t, d] = torch.matmul(encodings, self.AE.codebook.weight)
 
+        return self.AE.decoder(torch.sum(z_q, dim=2))
 
-    def loss(self, real, recon, **kwargs):
-        return self.NN.loss(real, recon, **kwargs)
 
     def training_step(self, input, batch_idx):
         with torch.no_grad():
@@ -131,14 +147,13 @@ class RQTransformer(L.LightningModule):
         mixture.requires_grad = True
         if self.global_step == 0 and self.IS_WANDB:
             self._define_log_metrics()
-        output, reverse_context = self.forward(mixture, is_train=True)
-        self.inference()
-        reverse_context.update({'is_train': True})
-        batch_losses = self.loss(input, output, **reverse_context)
-        batch_loss_mean = torch.mean(batch_losses)
-        self.train_losses.append(batch_loss_mean.item())
+        output, real = self.forward(mixture, is_train=True)
+        output = rearrange(output, 'b l n c -> (b l n) c')
+        real = rearrange(real, 'b l n -> (b l n)')
+        batch_loss = self.loss(output, real)
+        self.train_losses.append(batch_loss.item())
         self.ema.update()
-        return batch_loss_mean
+        return batch_loss
 
     def on_train_epoch_end(self) -> None:
         loss = sum(self.train_losses) / len(self.train_losses)

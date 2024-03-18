@@ -1,9 +1,11 @@
-from pathlib import Path
+from einops import rearrange
+import numpy
 from torch.utils.data import DataLoader
 import torch
+import torchaudio
+from scipy.cluster.vq import kmeans
 import constants as cst
-
-
+import soundfile as sf
 
 def compute_final_output_dim(input_dim, kernel_sizes, paddings, dilations, strides, num_convs):
     for i in range(num_convs):
@@ -52,9 +54,27 @@ def compute_mean_std(train_set, batch_size, num_workers, shuffle):
     return mean, std
 
 
-def save_audio(self, waveform, filename):
-    if isinstance(waveform, torch.Tensor):
-        waveform = waveform.cpu().detach().numpy()
+def save_audio(waveform, filename):
+    if isinstance(waveform, numpy.ndarray):
+        waveform = torch.tensor(waveform)
+    waveform = waveform.cpu().detach()
+    if waveform.ndim == 2:
+        if (waveform.shape[0] > waveform.shape[1]):
+            waveform = waveform.T
+    else:
+        waveform = waveform.unsqueeze(0)
     # Save as WAV
-    #sf.write(cst.RECON_DIR+'/' + filename +'.wav', waveform, cst.SAMPLE_RATE)
+    torchaudio.save(cst.RECON_DIR + '/' + filename +'.wav', waveform, cst.SAMPLE_RATE)
 
+
+def compute_centroids(model, train_set):
+    list = []
+    for i in range(50):
+        list.append(torch.sum(train_set.__getitem__(i), dim=-2))
+    list = torch.stack(list).to(cst.DEVICE, torch.float32)
+    list = rearrange(list, 'b w -> b 1 w').contiguous()
+    z_e = model.AE.encoder(list)
+    z_e = rearrange(z_e, 'b w c -> (b w) c').contiguous()
+    centroids, _ = kmeans(z_e.detach().cpu(), model.AE.codebook_length, iter=100)
+    print(centroids.shape)
+    return centroids

@@ -23,7 +23,7 @@ class VQVAE(nn.Module):
         super().__init__()
 
         self.init_kmeans = config.HYPER_PARAMETERS[LearningHyperParameter.INIT_KMEANS]
-        self.commitment_loss_weight = config.HYPER_PARAMETERS[LearningHyperParameter.COMMITMENT_LOSS_WEIGHT]
+        self.SDR_LOSS_WEIGHT = config.HYPER_PARAMETERS[LearningHyperParameter.SDR_LOSS_WEIGHT]
         self.IS_DEBUG = config.IS_DEBUG
         self.codebook_length = config.HYPER_PARAMETERS[LearningHyperParameter.CODEBOOK_LENGTH]
         self.is_training = config.IS_TRAINING
@@ -51,12 +51,11 @@ class VQVAE(nn.Module):
             num_convs = num_convs
         )
         self.latent_dim = hidden_channels[-1]
-        self.codebook = nn.Embedding(self.codebook_length, self.latent_dim)
-        self.codebook.weight.data.uniform_(-1 / self.codebook_length, 1 / self.codebook_length)
+        self.codebooks = nn.ModuleList([nn.Embedding(self.codebook_length, self.latent_dim)])
+        self.codebooks[0].weight.data.uniform_(-1 / self.codebook_length, 1 / self.codebook_length)
 
         self.encoder = Encoder(
                 input_size=init_sample_len,
-                audio_srcs=len(cst.STEMS),
                 hidden_channels=hidden_channels,
                 kernel_sizes=kernel_sizes,
                 strides=strides,
@@ -64,7 +63,7 @@ class VQVAE(nn.Module):
                 dilations=dilations,
                 lstm_layers=config.HYPER_PARAMETERS[LearningHyperParameter.LSTM_LAYERS],
                 num_convs=num_convs,
-                res_type=config.HYPER_PARAMETERS[LearningHyperParameter.RES_TYPE],
+                dropout=config.HYPER_PARAMETERS[LearningHyperParameter.DROPOUT],
             )
         self.decoder = Decoder(
                 audio_srcs=len(cst.STEMS),
@@ -77,7 +76,7 @@ class VQVAE(nn.Module):
                 batch_size=config.HYPER_PARAMETERS[LearningHyperParameter.BATCH_SIZE],
                 emb_sample_len=emb_sample_len,
                 num_convs=num_convs,
-                res_type=config.HYPER_PARAMETERS[LearningHyperParameter.RES_TYPE],
+                dropout=config.HYPER_PARAMETERS[LearningHyperParameter.DROPOUT],
             )
         self.codebook_freq = torch.zeros(self.codebook_length, device=cst.DEVICE)
 
@@ -114,60 +113,48 @@ class VQVAE(nn.Module):
     def forward(self, x, is_train, batch_idx):
         #adding channel dimension
         x = rearrange(x, 'b l-> b 1 l')
-
         z_e, encoding_indices = self.encode(x)
-        # if it is the first iteration we initialize the codebook with kmeans
-        if self.init_kmeans:
-            with torch.no_grad():
-                centroids, _ = kmeans(z_e.detach().cpu(), self.codebook_length, iter=100)
-                self.codebook.weight.data[0:centroids.shape[0]] = torch.tensor(centroids, device=self.device, dtype=torch.float32).contiguous()
-                self.init_kmeans = False
         
-        if batch_idx % 50 == 0:
+        if batch_idx % 50 == 0 and batch_idx != 0 and is_train:
             # reinitialize all the codebook vector that have less than 1 value
             # with a random vector from the encoder output
             for index in range(self.codebook_length):
                 if self.codebook_freq[index] < 1:
-                    i = random.randint(0, z_e.shape[0])
-                    self.codebook.weight.data[index] = z_e[i]
+                    i = random.randint(0, z_e.shape[0]-1)
+                    self.codebooks[0].weight.data[index] = z_e[i]
             # reinitialize the dictionary
             self.codebook_freq = torch.zeros(self.codebook_length, device=cst.DEVICE)
-
-        recon, z_q = self.decode(z_e, encoding_indices, x.shape[0], is_train)
-
-        return recon, z_q, z_e
+        
+        recon, comm_loss = self.decode(encoding_indices, x.shape[0], z_e, is_train)
+        return recon, comm_loss
 
 
     def encode(self, x):
         x = self.encoder(x)
         z_e = rearrange(x, 'b w c -> (b w) c').contiguous()
-        dist = torch.cdist(z_e, self.codebook.weight)
+        dist = torch.cdist(z_e, self.codebooks[0].weight)
         _, encoding_indices = torch.min(dist, dim=1)
         #update the dictionary of indices with the frequency of each index of the codebook
         self.codebook_freq[encoding_indices] += 1
         return z_e, encoding_indices
 
 
-    def decode(self, z_e, encoding_indices, batch_size, is_train):
-        encodings = F.one_hot(encoding_indices, self.codebook_length).float()
-        z_q = torch.matmul(encodings, self.codebook.weight)
-
+    def decode(self, encoding_indices, batch_size, z_e, is_train=True):
+        z_q = self.codebooks[0](encoding_indices)
+        q_latent_loss = F.mse_loss(z_e.detach(), z_q)      # we train the codebook
+        e_latent_loss = F.mse_loss(z_e, z_q.detach())      # we train the encoder
+        commitment_loss = 0.75*q_latent_loss + e_latent_loss
         if is_train:
             # straight-through gradient estimation: we attach z_q to the computational graph
             # to subsequently pass the gradient unaltered from the decoder to the encoder
             # whatever the gradients you get for the quantized variable z_q they will just be copy-pasted into z_e
             z_q = z_e + (z_q - z_e).detach()
-
         z_q_rearranged = rearrange(z_q, '(b l) c -> b l c', b=batch_size).contiguous()
         recon = self.decoder(z_q_rearranged)
-        return recon, z_q
+        return recon, commitment_loss
 
 
-    def loss(self, input, recon, z_q, z_e):
-        # Commitment loss is the mse between the quantized latent vector and the encoder output
-        q_latent_loss = F.mse_loss(z_e.detach(), z_q)      # we train the codebook
-        e_latent_loss = F.mse_loss(z_e, z_q.detach())      # we train the encoder
-        commitment_loss = q_latent_loss + e_latent_loss
+    def loss(self, input, recon, comm_loss):
         # Reconstruction loss is the mse between the input and the reconstruction
         recon_time_term = F.mse_loss(input, recon)
         multi_spectral_recon_loss = 0
@@ -182,8 +169,10 @@ class VQVAE(nn.Module):
                 multi_spectral_recon_loss = multi_spectral_recon_loss + l1_mel_loss + l2_log_mel_loss
         self.recon_time_terms.append(recon_time_term.item())
         self.multi_spectral_recon_losses.append(multi_spectral_recon_loss.item())
-        self.commitment_losses.append(commitment_loss.item())
-        print(f"Reconstruction time term: {recon_time_term.item()}")
-        print(f"Multi spectral reconstruction loss: {multi_spectral_recon_loss.item()}")
-        print(f"Commitment loss: {commitment_loss.item()}")
-        return recon_time_term + commitment_loss + self.multi_spectral_recon_loss_weight*multi_spectral_recon_loss
+        #self.commitment_losses.append(commitment_loss.item())
+        self.commitment_losses.append(comm_loss.item())
+        #print(f"Reconstruction time term: {recon_time_term.item()}")
+        #print(f"Multi spectral reconstruction loss: {multi_spectral_recon_loss.item()}")
+        #print(f"Commitment loss: {commitment_loss.item()}")
+        return recon_time_term + self.multi_spectral_recon_loss_weight*multi_spectral_recon_loss + comm_loss
+    

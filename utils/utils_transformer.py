@@ -24,14 +24,15 @@ def sinusoidal_positional_embedding(token_sequence_size, token_embedding_dim, n=
 
 def load_autoencoder(model_name):
     dir = Path(cst.DIR_SAVED_MODEL + "/" + model_name)
-    best_val_loss = 100000
+    best_val_loss = -100000
 
     for file in dir.iterdir():
         val_loss = float(file.name.split("=")[1].split("_")[0])
-        if val_loss < best_val_loss:
+        if val_loss == 4.0589:
+        #if val_loss > best_val_loss:
             best_val_loss = val_loss
             checkpoint_reference = file
-
+    print("loading checkpoint: ", checkpoint_reference)
     # load checkpoint
     checkpoint = torch.load(checkpoint_reference, map_location=cst.DEVICE) 
     config = checkpoint["hyper_parameters"]["config"]  

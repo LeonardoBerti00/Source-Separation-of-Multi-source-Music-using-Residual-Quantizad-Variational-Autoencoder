@@ -1,31 +1,37 @@
 # Multi-source Masked Language Model for Audio
 Multi-source masked language model for audio based on quantized representations
 
-start encoding: torch.Size([128, 1, 44100])
+bat16_cod_4090_num_8
+ test sdri on epoch 0 is 5.5826 with 10000
 
-8820
-1764
-588
-194
-64
+ test sdri 5.9 with 20000
 
-shape after convs: torch.Size([128, 32, 64])
+ test sdri 6.11 with 80000
 
-shape after rearrange: torch.Size([128, 64, 32])
 
-shape after LSTM: torch.Size([128, 64, 32])
+RQ-VAE without training codebook
+  test sdri on epoch 0 is 6.1163
 
-start decoding: torch.Size([128, 64, 32])
+RQ-VAE re-init ema
+  test sdri on epoch 0 is 7.1392
 
-print shape after lstm: torch.Size([128, 64, 32])
+RQ-VAE 2048 re-init ema
+  test sdri on epoch 0 is 6.6325
 
-print shape after rearrange: torch.Size([128, 32, 64])
+RQ-VAE re-init without ema 
+  test sdri on epoch 0 is 6.4452
 
-64
-194
-588
-1764
-8820
-44100
+RQ-VAE 8 re-init ema
+  test sdri on epoch 0 is 6.5268
 
-print shape after convs: torch.Size([128, 4, 44100])
+RQ-VAE loss paper
+  test sdri on epoch 0 is 6.1385
+
+RQ-VAE noise
+  test sdri on epoch 0 is 6.4929
+
+VQ-VAE without training codebook:
+  test sdri on epoch 7 is 6.6332
+
+VQ-VAE training codebook:
+  test sdri on epoch 0 is 6.8866

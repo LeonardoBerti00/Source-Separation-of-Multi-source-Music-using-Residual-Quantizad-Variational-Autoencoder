@@ -25,12 +25,15 @@ class LearningHyperParameter(str, Enum):
     INIT_KMEANS = "init_kmeans"
     CONV_SETUP = "conv_setup"
     MULTI_SPECTRAL_RECON_LOSS_WEIGHT = "multi_spectral_recon_loss_weight"
-    COMMITMENT_LOSS_WEIGHT = "commitment_loss_weight"
+    SDR_LOSS_WEIGHT = "SDR_LOSS_WEIGHT"
     RES_TYPE = "res_type"
     NUM_QUANTIZERS = "num_quantizers"
     NUM_HEADS = "num_heads"
     NUM_TRANSFORMER_LAYERS = "num_transformer_layers"
     Z_SCORE = "z_score"
+    RECON_LOSS_WEIGHT = "recon_loss_weight"
+    SHARED_CODEBOOK = "shared_codebook"
+    NUM_TRANS_AE_LAYERS = "num_trans_ae_layers"
 
 
 class Optimizers(Enum):
@@ -52,19 +55,18 @@ SEED = 0
 
 PRECISION = 32
 CHANNEL_SIZE = 1
-DURATION = 5
+DURATION = 4
 MIN_DURATION = 12
 MAX_DURATION = 640
 SAMPLE_RATE = 22050
 SAMPLE_LENGTH = SAMPLE_RATE * DURATION
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-#DEVICE = 'cpu'
-#AUDIO_FILES_DIR_TRAIN = 'data/Slakh/slakh2100/train'
-#AUDIO_FILES_DIR_VAL = 'data/Slakh/slakh2100/validation'
-#AUDIO_FILES_DIR_TEST = 'data/Slakh/slakh2100/test'
-AUDIO_FILES_DIR_TRAIN = 'data/babySlakh/train'
-AUDIO_FILES_DIR_VAL = 'data/babySlakh/validation'
-AUDIO_FILES_DIR_TEST = 'data/babySlakh/test'
+AUDIO_FILES_DIR_TRAIN = 'data/Slakh/slakh2100/train'
+AUDIO_FILES_DIR_VAL = 'data/Slakh/slakh2100/validation'
+AUDIO_FILES_DIR_TEST = 'data/Slakh/slakh2100/test'
+#AUDIO_FILES_DIR_TRAIN = 'data/babySlakh/train'
+#AUDIO_FILES_DIR_VAL = 'data/babySlakh/validation'
+#AUDIO_FILES_DIR_TEST = 'data/babySlakh/test'
 STEMS = ["bass", "drums", "guitar", "piano"]
 DIR_SAVED_MODEL = "data/checkpoints"
 DATA_DIR = "data"

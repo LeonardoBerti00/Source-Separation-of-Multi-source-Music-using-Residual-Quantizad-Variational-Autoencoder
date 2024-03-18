@@ -10,10 +10,10 @@ HP_VAE = {
 }
 
 HP_VAE_FIXED = {
-    cst.LearningHyperParameter.BATCH_SIZE.value: 128,
+    cst.LearningHyperParameter.BATCH_SIZE.value: 16,
     cst.LearningHyperParameter.DROPOUT.value: 0,
-    cst.LearningHyperParameter.LEARNING_RATE.value: 0.0001,
+    cst.LearningHyperParameter.LEARNING_RATE.value: 0.001,
     cst.LearningHyperParameter.OPTIMIZER.value: cst.Optimizers.ADAM.value,
-    cst.LearningHyperParameter.LATENT_DIM.value: 32,
+    cst.LearningHyperParameter.LATENT_DIM.value: 256,
     cst.LearningHyperParameter.LSTM_LAYERS.value: 2,
 }
