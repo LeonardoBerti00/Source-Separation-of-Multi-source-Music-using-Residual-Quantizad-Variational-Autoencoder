@@ -43,9 +43,7 @@ if __name__ == "__main__":
             model, config = load_transformer(config.CHOSEN_MODEL.name)
         else:
             model, config = load_autoencoder(config.CHOSEN_MODEL.name)
-        model.IS_WANDB = False 
-        model.IS_DEBUG = True  
-        config.IS_TESTING = True
+        
         run(config, accelerator, model)
 
     # training without using wandb

@@ -51,35 +51,62 @@ class LitAutoencoder(L.LightningModule):
             self.ema = ExponentialMovingAverage(self.AE.parameters(), decay=0.99)
         else:
             self.ema = ExponentialMovingAverage(self.AE.codebooks.parameters(), decay=0.99)
-
-
+        self.p = config.HYPER_PARAMETERS[LearningHyperParameter.P]
+        self.num_steps = config.HYPER_PARAMETERS[LearningHyperParameter.NUM_STEPS]
 
     
-    def forward(self, x, is_train, batch_idx):
-        return self.AE.forward(x, is_train, batch_idx)
+    
+    def forward_nade(self, x, is_train, batch_idx):
+        losses = []
+        if not is_train:
+            p = 1.0
+        else:
+            p = self.p
+        for i in range(self.num_steps):
+            if i == 0:
+                x_masked = self.masking(x, p)
+                recon, comm_loss = self.AE.forward(x_masked, is_train, batch_idx)
+                loss = self.AE.loss(x, recon, comm_loss)
+                losses.append(loss)
+            else:
+                if is_train:
+                    loss.backward()
+                    self.optimizer.step()
+                    self.ema.update()
+                    self.optimizer.zero_grad()
+                recon = torch.cat([recon.detach(), x[:, -1:, :]], dim=-2)
+                recon, comm_loss = self.AE.forward(recon, is_train, batch_idx)
+                loss = self.AE.loss(x, recon, comm_loss)
+                losses.append(loss)
+        return recon, torch.stack(losses), loss
 
-
-    def loss(self, input, recon, comm_loss):
-        return self.AE.loss(input, recon, comm_loss)
-
+    def masking(self, x, p):
+        # with probability p we mask the input
+        mask = torch.ones(x.shape[0], x.shape[1], device=x.device)
+        mask.requires_grad = False
+        mask[torch.rand(x.shape[0], x.shape[1]) <= p] = 0.0
+        mask[:, 4] = 1.0
+        x = torch.einsum('b c l, b c -> b c l', x, mask)
+        return x
 
     def training_step(self, x, batch_idx):
+        if self.global_step == 0 and self.IS_WANDB:
+            self._define_log_metrics()
         with torch.no_grad():
             # from source to mixture
             mixture = torch.sum(x, dim=-2)
-        mixture.requires_grad = True
-        if self.global_step == 0 and self.IS_WANDB:
-            self._define_log_metrics()
-        recon, comm_loss = self.forward(mixture, is_train=True, batch_idx=batch_idx)
-        batch_losses = self.loss(x, recon, comm_loss)
-        batch_loss_mean = torch.mean(batch_losses)
-        self.train_losses.append(batch_loss_mean.item())
+        mixture = rearrange(mixture, 'b t -> b 1 t')
+        input = torch.cat([x, mixture], dim=-2)
+        input.requires_grad = True
+        recon, losses, last_loss = self.forward(input, is_train=True, batch_idx=batch_idx)        
+        self.train_losses.append(losses.mean().item())
         self.ema.update()
-        return batch_loss_mean
+        return last_loss
     
 
     def on_train_epoch_start(self) -> None:
         print(f'learning rate: {self.optimizer.param_groups[0]["lr"]}')
+        print(f'p: {self.p}')
 
 
     def on_validation_start(self) -> None:
@@ -96,22 +123,22 @@ class LitAutoencoder(L.LightningModule):
         self.train_losses = []
         self.val_ema_sdr = []
         self.val_losses = []
+        if self.p < 0.95:
+            self.p = self.p * 1.4
         print(f'\ntrain loss on epoch {self.current_epoch} is {round(loss, 4)}')
 
 
     def validation_step(self, x, batch_idx):
         # from source to mixture
         mixture = torch.sum(x, dim=-2)
-        recon, comm_loss = self.forward(mixture, is_train=False, batch_idx=batch_idx)
-        batch_losses = self.loss(x, recon, comm_loss)
-        batch_loss_mean = torch.mean(batch_losses)
-        self.val_losses.append(batch_loss_mean.item())
-        self.val_snrs.append(self.si_snr(x, recon).item())
-        self.val_sdrs.append(self.si_sdr(x, recon).item())
+        mixture = rearrange(mixture, 'b t -> b 1 t')
+        input = torch.cat([x, mixture], dim=-2)
+        recon, losses, _ = self.forward(input, is_train=False, batch_idx=batch_idx)
+  
         # Validation: with EMA
         with self.ema.average_parameters():
-            recon, comm_loss = self.forward(mixture, is_train=False, batch_idx=batch_idx)
-            self.val_ema_sdr.append(self.si_sdr(x, recon).item())
+            recon, _, _ = self.forward(input, is_train=False, batch_idx=batch_idx)
+            self.val_ema_sdr.append(self.si_sdr(x[:, :4, :], recon[:, :4, :]).item())
 
         if batch_idx % 10 == 0 and self.IS_DEBUG:
             save_audio(recon[0][0], 'recon_bass'+str(batch_idx))
@@ -125,8 +152,7 @@ class LitAutoencoder(L.LightningModule):
             save_audio(mixture[0]/4, 'mixture'+str(batch_idx))
             print(f"recon mean: {recon.mean()}")
             print(f"input mean: {x.mean()}") 
-        return batch_loss_mean
-
+        return losses
 
     def on_validation_epoch_end(self) -> None:
         self.val_loss = sum(self.val_losses) / len(self.val_losses)
@@ -168,13 +194,14 @@ class LitAutoencoder(L.LightningModule):
             return 
         # from source to mixture
         mixture = torch.sum(x, dim=-2)
-        recon, comm_loss = self.forward(mixture, is_train=False, batch_idx=batch_idx)
-        batch_losses = self.loss(x, recon, comm_loss)
-        batch_loss_mean = torch.mean(batch_losses)
-        self.test_losses.append(batch_loss_mean.item())
-        self.test_snrs.append(self.si_snr(x, recon).item())
-        self.test_sdrs.append(self.si_sdr(x, recon).item())
+        mixture = rearrange(mixture, 'b t -> b 1 t')
+        input = torch.cat([x, mixture], dim=-2)
+        recon, losses, _ = self.forward(input, is_train=False, batch_idx=batch_idx)
+        self.test_losses.append(losses.mean().item())
+        self.test_snrs.append(self.si_snr(x, recon[:, :4, :]).item())
+        self.test_sdrs.append(self.si_sdr(x, recon[:, :4, :]).item())
         list_sdri = []
+        mixture = rearrange(mixture, 'b 1 t -> b t')
         for  i in range(len(cst.STEMS)):
             list_sdri.append(self.si_sdr(x[:, i], recon[:, i]).item() - self.si_sdr(x[:, i], mixture).item())
         self.test_sdris.append(sum(list_sdri) / len(list_sdri))
@@ -188,7 +215,7 @@ class LitAutoencoder(L.LightningModule):
             save_audio(x[0][1], 'source_drums'+str(batch_idx))
             save_audio(x[0][2], 'source_guitar'+str(batch_idx))
             save_audio(x[0][3], 'source_piano'+str(batch_idx))
-        return batch_loss_mean
+        return losses
 
 
     def on_test_end(self) -> None:

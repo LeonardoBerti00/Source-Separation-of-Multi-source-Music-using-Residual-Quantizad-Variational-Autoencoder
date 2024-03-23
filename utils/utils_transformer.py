@@ -28,7 +28,7 @@ def load_autoencoder(model_name):
 
     for file in dir.iterdir():
         val_loss = float(file.name.split("=")[1].split("_")[0])
-        if val_loss == 4.0589:
+        if val_loss == 2.4309:
         #if val_loss > best_val_loss:
             best_val_loss = val_loss
             checkpoint_reference = file
@@ -38,10 +38,11 @@ def load_autoencoder(model_name):
     config = checkpoint["hyper_parameters"]["config"]  
  
     model = LitAutoencoder.load_from_checkpoint(checkpoint_reference, map_location=cst.DEVICE)
-
+    model.IS_DEBUG = True
     model.IS_WANDB = False
     model.is_training = False
     model.AE.init_kmeans = False
+    config.IS_TESTING = True
     # we freeze the model
     for param in model.parameters():
         param.requires_grad = False

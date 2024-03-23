@@ -185,7 +185,7 @@ class RQVAE(nn.Module):
 
     def loss(self, input, recon, comm_loss):
         # Reconstruction loss is the mse between the input and the reconstruction
-        recon_time_term = F.mse_loss(input, recon)
+        recon_time_term = F.mse_loss(input[:, :4, :], recon[:, :4, :])
         multi_spectral_recon_loss = torch.tensor(0, dtype=torch.float32, device=cst.DEVICE)
         
         for src in range(len(cst.STEMS)):

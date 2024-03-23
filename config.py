@@ -48,12 +48,14 @@ class Configuration:
         self.HYPER_PARAMETERS[LearningHyperParameter.STRIDES] = [[1, 5, 5, 4, 3, 3], [1, 5, 5, 4, 2]]
         self.HYPER_PARAMETERS[LearningHyperParameter.PADDINGS] = [[1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
         self.HYPER_PARAMETERS[LearningHyperParameter.DILATIONS] = [[1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
-        self.HYPER_PARAMETERS[LearningHyperParameter.HIDDEN_CHANNELS] = [[1, 8, 16, 32, 64, 128, 256], [1, 16, 32, 64, 128, 256]]
+        self.HYPER_PARAMETERS[LearningHyperParameter.HIDDEN_CHANNELS] = [[5, 8, 16, 32, 64, 128, 256], [5, 16, 32, 64, 128, 256]]
         self.HYPER_PARAMETERS[LearningHyperParameter.NUM_CONVS] = len(
             self.HYPER_PARAMETERS[LearningHyperParameter.KERNEL_SIZES][self.HYPER_PARAMETERS[LearningHyperParameter.CONV_SETUP]]
             )
         self.HYPER_PARAMETERS[LearningHyperParameter.MULTI_SPECTRAL_RECON_LOSS_WEIGHT] = 1e-6
         self.HYPER_PARAMETERS[LearningHyperParameter.RECON_LOSS_WEIGHT] = 1
+        self.HYPER_PARAMETERS[LearningHyperParameter.P] = 0.3
+        self.HYPER_PARAMETERS[LearningHyperParameter.NUM_STEPS] = 8
 
         self.HYPER_PARAMETERS[LearningHyperParameter.NUM_HEADS] = 8
         self.HYPER_PARAMETERS[LearningHyperParameter.NUM_TRANSFORMER_LAYERS] = 6

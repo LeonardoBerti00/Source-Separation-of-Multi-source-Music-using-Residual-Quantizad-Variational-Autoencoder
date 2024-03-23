@@ -35,3 +35,9 @@ VQ-VAE without training codebook:
 
 VQ-VAE training codebook:
   test sdri on epoch 0 is 6.8866
+
+RQ-VAE NADE 1 step
+  test sdri on epoch 0 is 5.795
+
+RQ-VAE NADE 1 step
+  test sdri on epoch 0 is 6.5

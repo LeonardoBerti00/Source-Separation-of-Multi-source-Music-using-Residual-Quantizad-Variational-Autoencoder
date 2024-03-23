@@ -34,6 +34,8 @@ class LearningHyperParameter(str, Enum):
     RECON_LOSS_WEIGHT = "recon_loss_weight"
     SHARED_CODEBOOK = "shared_codebook"
     NUM_TRANS_AE_LAYERS = "num_trans_ae_layers"
+    P = "p"
+    NUM_STEPS = "num_steps"
 
 
 class Optimizers(Enum):
@@ -72,7 +74,7 @@ DIR_SAVED_MODEL = "data/checkpoints"
 DATA_DIR = "data"
 RECON_DIR = "data/reconstructions"
 
-PROJECT_NAME = "MMLM_AE"
+PROJECT_NAME = "MMLM"
 
 MEAN = 122.759
 STD = 2359.9309

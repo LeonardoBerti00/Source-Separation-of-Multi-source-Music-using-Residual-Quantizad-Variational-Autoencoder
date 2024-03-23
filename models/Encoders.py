@@ -35,7 +35,6 @@ class Encoder(nn.Module):
                 nn.PReLU(init=0.1),
                 nn.Dropout(dropout),
                 ResidualBlock(hidden_channels[i + 1]),
-                ResidualBlock(hidden_channels[i + 1]),
                 )
             )
             '''

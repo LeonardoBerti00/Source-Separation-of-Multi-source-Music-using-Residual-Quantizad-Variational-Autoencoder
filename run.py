@@ -74,7 +74,7 @@ def train(config, trainer):
     )
 
     train_dataloader, val_dataloader, test_dataloader = data_module.train_dataloader(), data_module.val_dataloader(), data_module.test_dataloader()
-
+   
     if config.IS_TRAINING_AE:
         model = LitAutoencoder(config).to(cst.DEVICE, torch.float32)
         if config.CHOSEN_MODEL == cst.Autoencoders.VQVAE or config.CHOSEN_MODEL == cst.Autoencoders.RQVAE:
@@ -97,7 +97,7 @@ def train(config, trainer):
                     model.AE.codebooks[0].weight.data = torch.tensor(centroids[:code_len], device=cst.DEVICE, dtype=torch.float32).contiguous()
     else:
         model = RQTransformer(config=config, test_num_steps=test_set.__len__()).to(cst.DEVICE, torch.float32)
-
+    
     print("\nstarting training\n")
     trainer.fit(model, train_dataloader, val_dataloader)
     trainer.test(model, dataloaders=test_dataloader)
@@ -152,7 +152,7 @@ def run_wandb(config, accelerator):
                 if param.value in model_params:
                     run_name += str(param.value[:3]) + "_" + str(model_params[param.value]) + "_"
 
-        with wandb.init(project=cst.PROJECT_NAME, name=run_name) as wandb_instance:
+        with wandb.init(project=cst.PROJECT_NAME, name=run_name, entity="leonardo-berti07") as wandb_instance:
             if config.IS_SWEEP:
                 model_params = wandb.config
 
