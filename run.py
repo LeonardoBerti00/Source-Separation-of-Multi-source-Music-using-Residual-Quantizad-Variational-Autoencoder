@@ -15,7 +15,9 @@ from models.RQTransformer.RQTransformer import RQTransformer
 from models.VQVAE.VQVAE_hp import HP_VQVAE, HP_VQVAE_FIXED
 from models.RQVAE.RQVAE_hp import HP_RQVAE, HP_RQVAE_FIXED
 from models.VAE.VAE_hp import HP_VAE, HP_VAE_FIXED
-from utils.utils import compute_centroids
+from models.RQTransformer.RQTransformer_hp import HP_RQTR, HP_RQTR_FIXED
+from utils.utils import compute_centroids, save_audio
+from utils.utils_transformer import load_autoencoder
 
 
 HP_SEARCH_TYPES = namedtuple('HPSearchTypes', ("sweep", "fixed"))
@@ -23,6 +25,7 @@ HP_DICT_MODEL = {
     cst.Autoencoders.VQVAE: HP_SEARCH_TYPES(HP_VQVAE, HP_VQVAE_FIXED),
     cst.Autoencoders.RQVAE: HP_SEARCH_TYPES(HP_RQVAE, HP_RQVAE_FIXED),
     cst.Autoencoders.VAE: HP_SEARCH_TYPES(HP_VAE, HP_VAE_FIXED),
+    cst.Transformers.RQTRANSFORMER: HP_SEARCH_TYPES(HP_RQTR, HP_RQTR_FIXED)
 }
 
 
@@ -38,7 +41,8 @@ def train(config, trainer):
         sample_length=cst.SAMPLE_LENGTH,
         audio_files_dir=cst.AUDIO_FILES_DIR_TRAIN,
         stems=cst.STEMS,
-        z_score=config.HYPER_PARAMETERS[cst.LearningHyperParameter.Z_SCORE]
+        z_score=config.HYPER_PARAMETERS[cst.LearningHyperParameter.Z_SCORE],
+        is_test=False
     )
 
     val_set = MultiSourceDataset(
@@ -50,7 +54,8 @@ def train(config, trainer):
         sample_length=cst.SAMPLE_LENGTH,
         audio_files_dir=cst.AUDIO_FILES_DIR_VAL,
         stems=cst.STEMS,
-        z_score=config.HYPER_PARAMETERS[cst.LearningHyperParameter.Z_SCORE]
+        z_score=config.HYPER_PARAMETERS[cst.LearningHyperParameter.Z_SCORE],
+        is_test=False
     )
 
     test_set = MultiSourceDataset(
@@ -59,10 +64,11 @@ def train(config, trainer):
         min_duration=cst.MIN_DURATION,
         max_duration=cst.MAX_DURATION,
         aug_shift=config.HYPER_PARAMETERS[cst.LearningHyperParameter.AUG_SHIFT],
-        sample_length=cst.SAMPLE_LENGTH,
+        sample_length=cst.SAMPLE_LENGTH//2,
         audio_files_dir=cst.AUDIO_FILES_DIR_TEST,
         stems=cst.STEMS,
-        z_score=config.HYPER_PARAMETERS[cst.LearningHyperParameter.Z_SCORE]
+        z_score=config.HYPER_PARAMETERS[cst.LearningHyperParameter.Z_SCORE],
+        is_test=True
     )
 
     data_module = DataModule(
@@ -74,7 +80,6 @@ def train(config, trainer):
     )
 
     train_dataloader, val_dataloader, test_dataloader = data_module.train_dataloader(), data_module.val_dataloader(), data_module.test_dataloader()
-   
     if config.IS_TRAINING_AE:
         model = LitAutoencoder(config).to(cst.DEVICE, torch.float32)
         if config.CHOSEN_MODEL == cst.Autoencoders.VQVAE or config.CHOSEN_MODEL == cst.Autoencoders.RQVAE:
@@ -96,7 +101,7 @@ def train(config, trainer):
                 else:
                     model.AE.codebooks[0].weight.data = torch.tensor(centroids[:code_len], device=cst.DEVICE, dtype=torch.float32).contiguous()
     else:
-        model = RQTransformer(config=config, test_num_steps=test_set.__len__()).to(cst.DEVICE, torch.float32)
+        model = RQTransformer(config=config).to(cst.DEVICE, torch.float32)
     
     print("\nstarting training\n")
     trainer.fit(model, train_dataloader, val_dataloader)
@@ -111,34 +116,41 @@ def test(config, trainer, model):
         min_duration=cst.MIN_DURATION,
         max_duration=cst.MAX_DURATION,
         aug_shift=config.HYPER_PARAMETERS[cst.LearningHyperParameter.AUG_SHIFT],
-        sample_length=cst.SAMPLE_LENGTH,
+        sample_length=cst.SAMPLE_LENGTH//2,
         audio_files_dir=cst.AUDIO_FILES_DIR_TEST,
         stems=cst.STEMS,
-        z_score=config.HYPER_PARAMETERS[cst.LearningHyperParameter.Z_SCORE]
+        z_score=config.HYPER_PARAMETERS[cst.LearningHyperParameter.Z_SCORE],
+        is_test=True
     )
 
-    data_module = DataModule(None, None, test_set, batch_size=config.HYPER_PARAMETERS[cst.LearningHyperParameter.BATCH_SIZE], num_workers=8)
+    data_module = DataModule(None, None, test_set, batch_size=config.HYPER_PARAMETERS[cst.LearningHyperParameter.BATCH_SIZE], num_workers=1)
 
     test_dataloader = data_module.test_dataloader()
 
     model.to(cst.DEVICE, torch.float32)
-
     trainer.test(model, dataloaders=test_dataloader)
 
 
+
 def run(config, accelerator, model=None):
+    if config.CHOSEN_MODEL == cst.Transformers.RQTRANSFORMER:
+        early_stopping = EarlyStopping(monitor="val_ema_loss", mode="min", patience=3, verbose=True, min_delta=0.01)
+    else:
+        early_stopping = EarlyStopping(monitor="val_ema_sdr", mode="max", patience=3, verbose=True, min_delta=0.01)
     trainer = L.Trainer(
         accelerator=accelerator,
         precision=cst.PRECISION,
         max_epochs=config.HYPER_PARAMETERS[cst.LearningHyperParameter.EPOCHS],
-        callbacks=[EarlyStopping(monitor="val_ema_sdr", mode="max", patience=3, verbose=False)],
+        callbacks=[early_stopping],
         num_sanity_val_steps=0,
         detect_anomaly=False,
     )
     if (config.IS_TESTING):
-        test(config, trainer, model)
-    else:
+        test(config, trainer, model)            
+    elif config.IS_TRAINING:
         train(config, trainer)
+    else:
+        model.generating()
 
 
 def run_wandb(config, accelerator):
@@ -170,11 +182,16 @@ def run_wandb(config, accelerator):
             res_type = config.HYPER_PARAMETERS[cst.LearningHyperParameter.RES_TYPE]
             config.FILENAME_CKPT += "convsetup_" + str(conv_setup) + "_sr_" + str(sr) + "_duration_" + str(cst.DURATION) + "_restype_" + str(res_type) + ".ckpt"
 
+            if config.CHOSEN_MODEL == cst.Transformers.RQTRANSFORMER:
+                early_stopping = EarlyStopping(monitor="val_ema_loss", mode="min", patience=3, verbose=True, min_delta=0.01)
+            else:
+                early_stopping = EarlyStopping(monitor="val_ema_sdr", mode="max", patience=3, verbose=True, min_delta=0.01)
+
             trainer = L.Trainer(
                 accelerator=accelerator,
                 precision=cst.PRECISION,
                 max_epochs=config.HYPER_PARAMETERS[cst.LearningHyperParameter.EPOCHS],
-                callbacks=[EarlyStopping(monitor="val_ema_sdr", mode="max", patience=3, verbose=True, min_delta=0.1)],
+                callbacks=[early_stopping],
                 num_sanity_val_steps=0,
                 logger=wandb_logger,
                 detect_anomaly=False,
@@ -203,7 +220,7 @@ def run_wandb(config, accelerator):
 
 
 def sweep_init(config):
-    wandb.login(key="d29d51017f4231b5149d36ad242526b374c9c60a")
+    wandb.login(key="")
     sweep_config = {
         'method': 'grid',
         'metric': {

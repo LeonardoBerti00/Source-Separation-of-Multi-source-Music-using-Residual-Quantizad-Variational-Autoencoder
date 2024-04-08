@@ -36,6 +36,8 @@ class LearningHyperParameter(str, Enum):
     NUM_TRANS_AE_LAYERS = "num_trans_ae_layers"
     P = "p"
     NUM_STEPS = "num_steps"
+    NUM_SPATIAL_TRANSFORMER_LAYERS = "num_spatial_transformer_layers"
+    NUM_DEPTH_TRANSFORMER_LAYERS = "num_depth_transformer_layers"
 
 
 class Optimizers(Enum):
@@ -73,8 +75,9 @@ STEMS = ["bass", "drums", "guitar", "piano"]
 DIR_SAVED_MODEL = "data/checkpoints"
 DATA_DIR = "data"
 RECON_DIR = "data/reconstructions"
+GEN_DIR = "data/generations"
 
-PROJECT_NAME = "MMLM"
+PROJECT_NAME = ""
 
 MEAN = 122.759
 STD = 2359.9309

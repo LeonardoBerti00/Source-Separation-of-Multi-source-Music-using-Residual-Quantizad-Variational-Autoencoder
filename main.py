@@ -16,7 +16,7 @@ def set_torch():
     torch.set_default_dtype(torch.float32)
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
-    torch.autograd.set_detect_anomaly(True)
+    torch.autograd.set_detect_anomaly(False)
     torch.set_float32_matmul_precision('high')
 
 if __name__ == "__main__":
@@ -38,14 +38,14 @@ if __name__ == "__main__":
             start_wandb = run_wandb(config, accelerator)
             start_wandb()
 
-    elif config.IS_TESTING:
+    elif config.IS_TESTING or config.IS_SAMPLING:
         if config.CHOSEN_MODEL == cst.Transformers.RQTRANSFORMER:
-            model, config = load_transformer(config.CHOSEN_MODEL.name)
+            model, _ = load_transformer(config.CHOSEN_MODEL.name, config)
         else:
             model, config = load_autoencoder(config.CHOSEN_MODEL.name)
         
         run(config, accelerator, model)
-
+ 
     # training without using wandb
     elif config.IS_TRAINING:
         run(config, accelerator)

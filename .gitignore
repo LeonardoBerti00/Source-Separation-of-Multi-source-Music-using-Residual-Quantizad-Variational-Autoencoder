@@ -1,9 +1,9 @@
 lightning_logs
 data/Slakh
-data/train
-data/validation
-data/test
 /wandb/
 Paper
-data
+data/checkpoints
+data/babySlakh
+centroids*
 .vscode
+experiments.txt

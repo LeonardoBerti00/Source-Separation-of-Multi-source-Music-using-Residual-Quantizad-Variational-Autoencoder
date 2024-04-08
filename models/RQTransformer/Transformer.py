@@ -30,7 +30,7 @@ class TransformerBlock(nn.Module):
         super(TransformerBlock, self).__init__()
         self.mlp = nn.Sequential(
             nn.Linear(d_model, 4 * d_model),
-            nn.PReLU(inplace=True),
+            nn.PReLU(init=0.01),
             nn.Dropout(dropout),
             nn.Linear(4 * d_model, d_model),
         )

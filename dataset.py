@@ -27,9 +27,10 @@ def get_duration_sec(file, cache=False):
 
 #class ported from https://github.com/gladia-research-group/multi-source-diffusion-models/blob/main/main/data.py
 class MultiSourceDataset(Dataset):
-    def __init__(self, sr, channels, min_duration, max_duration, aug_shift, sample_length, audio_files_dir, stems, z_score):
+    def __init__(self, sr, channels, min_duration, max_duration, aug_shift, sample_length, audio_files_dir, stems, z_score, is_test):
         super().__init__()
         self.sr = sr
+        self.is_test = is_test
         self.channels = channels
         self.min_duration = min_duration or math.ceil(sample_length / sr)
         self.max_duration = max_duration or math.inf
@@ -43,17 +44,25 @@ class MultiSourceDataset(Dataset):
         self.aug_shift = aug_shift
         self.init_dataset()
 
+
     def init_dataset(self):
         # Load list of tracks and starts/durations
         tracks = os.listdir(self.audio_files_dir)
         #print(f"Found {len(tracks)} tracks.")
         self.filter(tracks)
 
-
     def __getitem__(self, item):
         index, offset = self.get_index_offset(item)
         wav = self.get_song_chunk(index, offset)
         # print(f"item: {item}, track: {index}, track: {self.tracks[index]},  offset: {offset},  cumsum: {self.cumsum[index]}, duration: {self.durations[index]}")
+        if self.is_test:
+            if item == 0:
+                self.last = wav
+                return 0
+            #concatenate it wav with the last item
+            new_wav = np.concatenate((self.last, wav), axis=1)
+            self.last = wav
+            return (torch.from_numpy(new_wav) - cst.MEAN) / cst.STD
         if self.z_score:
             return (torch.from_numpy(wav) - cst.MEAN) / cst.STD
         else:
@@ -232,7 +241,7 @@ class DataModule(pl.LightningDataModule):
         return DataLoader(
             dataset=self.data_test,
             batch_size=1,
-            num_workers=self.num_workers,
+            num_workers=1,
             pin_memory=True,
             shuffle=False,
             persistent_workers=True,

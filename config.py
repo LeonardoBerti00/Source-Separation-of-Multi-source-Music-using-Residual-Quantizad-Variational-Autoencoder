@@ -5,18 +5,17 @@ class Configuration:
     """ Represents the configuration file of the simulation, containing all variables of the simulation. """
     def __init__(self):
 
-        self.IS_WANDB = True
+        self.IS_WANDB = False
         self.IS_SWEEP = False
-        self.IS_TESTING = False
-        self.IS_TRAINING =  False
+        self.IS_TESTING = True
+        self.IS_SAMPLING = False
+        self.IS_TRAINING = False
         self.IS_TRAINING_AE = True
         self.IS_DEBUG = False
 
         self.CHOSEN_AE = cst.Autoencoders.RQVAE
         self.CHOSEN_TRANSFORMER = cst.Transformers.RQTRANSFORMER
         self.CHOSEN_MODEL = self.CHOSEN_AE if self.IS_TRAINING_AE else self.CHOSEN_TRANSFORMER
-
-        self.SWEEP_METHOD = 'bayes'
 
         self.WANDB_INSTANCE = None
         self.WANDB_RUN_NAME = None
@@ -48,7 +47,7 @@ class Configuration:
         self.HYPER_PARAMETERS[LearningHyperParameter.STRIDES] = [[1, 5, 5, 4, 3, 3], [1, 5, 5, 4, 2]]
         self.HYPER_PARAMETERS[LearningHyperParameter.PADDINGS] = [[1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
         self.HYPER_PARAMETERS[LearningHyperParameter.DILATIONS] = [[1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
-        self.HYPER_PARAMETERS[LearningHyperParameter.HIDDEN_CHANNELS] = [[5, 8, 16, 32, 64, 128, 256], [5, 16, 32, 64, 128, 256]]
+        self.HYPER_PARAMETERS[LearningHyperParameter.HIDDEN_CHANNELS] = [[1, 8, 16, 32, 64, 128, 256], [1, 16, 32, 64, 128, 256]]
         self.HYPER_PARAMETERS[LearningHyperParameter.NUM_CONVS] = len(
             self.HYPER_PARAMETERS[LearningHyperParameter.KERNEL_SIZES][self.HYPER_PARAMETERS[LearningHyperParameter.CONV_SETUP]]
             )
@@ -58,5 +57,5 @@ class Configuration:
         self.HYPER_PARAMETERS[LearningHyperParameter.NUM_STEPS] = 8
 
         self.HYPER_PARAMETERS[LearningHyperParameter.NUM_HEADS] = 8
-        self.HYPER_PARAMETERS[LearningHyperParameter.NUM_TRANSFORMER_LAYERS] = 6
-        self.HYPER_PARAMETERS[LearningHyperParameter.NUM_TRANS_AE_LAYERS] = 2
+        self.HYPER_PARAMETERS[LearningHyperParameter.NUM_SPATIAL_TRANSFORMER_LAYERS] = 12
+        self.HYPER_PARAMETERS[LearningHyperParameter.NUM_DEPTH_TRANSFORMER_LAYERS] = 4

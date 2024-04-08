@@ -8,7 +8,8 @@ HP_RQTR = {
 
 HP_RQTR_FIXED = {
     cst.LearningHyperParameter.BATCH_SIZE.value: 16,
-    cst.LearningHyperParameter.LEARNING_RATE.value: 0.001,
+    cst.LearningHyperParameter.LEARNING_RATE.value: 0.0001,
     cst.LearningHyperParameter.NUM_HEADS.value: 8,
-    cst.LearningHyperParameter.NUM_TRANSFORMER_LAYERS.value: 6,
+    cst.LearningHyperParameter.NUM_SPATIAL_TRANSFORMER_LAYERS.value: 24,
+    cst.LearningHyperParameter.NUM_DEPTH_TRANSFORMER_LAYERS.value: 4
 }

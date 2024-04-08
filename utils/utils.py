@@ -54,7 +54,7 @@ def compute_mean_std(train_set, batch_size, num_workers, shuffle):
     return mean, std
 
 
-def save_audio(waveform, filename):
+def save_audio(waveform, filename, is_generated=False):
     if isinstance(waveform, numpy.ndarray):
         waveform = torch.tensor(waveform)
     waveform = waveform.cpu().detach()
@@ -64,7 +64,10 @@ def save_audio(waveform, filename):
     else:
         waveform = waveform.unsqueeze(0)
     # Save as WAV
-    torchaudio.save(cst.RECON_DIR + '/' + filename +'.wav', waveform, cst.SAMPLE_RATE)
+    if is_generated:
+        torchaudio.save(cst.GEN_DIR + '/' + filename +'.wav', waveform, cst.SAMPLE_RATE)
+    else:
+        torchaudio.save(cst.RECON_DIR + '/' + filename +'.wav', waveform, cst.SAMPLE_RATE)
 
 
 def compute_centroids(model, train_set):
@@ -78,3 +81,7 @@ def compute_centroids(model, train_set):
     centroids, _ = kmeans(z_e.detach().cpu(), model.AE.codebook_length, iter=100)
     print(centroids.shape)
     return centroids
+
+def is_silent(signal: torch.Tensor, silence_threshold: float = 0.000215) -> bool:
+    num_samples = signal.shape[-1]
+    return torch.linalg.norm(signal) / num_samples < silence_threshold

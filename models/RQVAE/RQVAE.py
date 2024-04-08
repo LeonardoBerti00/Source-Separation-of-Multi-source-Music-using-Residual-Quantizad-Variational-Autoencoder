@@ -29,7 +29,6 @@ class RQVAE(nn.Module):
         self.IS_DEBUG = config.IS_DEBUG
         self.codebook_length = config.HYPER_PARAMETERS[LearningHyperParameter.CODEBOOK_LENGTH]
         self.shared_codebook = config.HYPER_PARAMETERS[LearningHyperParameter.SHARED_CODEBOOK]
-        self.is_training = config.IS_TRAINING
         self.recon_time_terms = []
         self.multi_spectral_recon_losses = []
         self.commitment_losses = []
@@ -57,8 +56,8 @@ class RQVAE(nn.Module):
   
         if self.shared_codebook:
             self.codebooks = nn.ModuleList([nn.Embedding(self.codebook_length, self.latent_dim, device=cst.DEVICE)])
-            self.codebooks.weight.data.uniform_(-1 / self.codebook_length, 1 / self.codebook_length)
-            self.codebooks.weight.requires_grad = True
+            init.xavier_normal_(self.codebooks[0].weight.data)
+            self.codebooks[0].weight.requires_grad = True
             self.codebooks_freq = torch.zeros(1, self.codebook_length, device=cst.DEVICE)
         else:
             self.codebooks = nn.ModuleList([nn.Embedding(self.codebook_length, self.latent_dim, device=cst.DEVICE) for _ in range(self.num_quantizers)])
@@ -86,13 +85,10 @@ class RQVAE(nn.Module):
                 paddings=paddings,
                 dilations=dilations,
                 lstm_layers=config.HYPER_PARAMETERS[LearningHyperParameter.LSTM_LAYERS],
-                batch_size=config.HYPER_PARAMETERS[LearningHyperParameter.BATCH_SIZE],
                 emb_sample_len=self.emb_sample_len,
                 num_convs=num_convs,
                 dropout=config.HYPER_PARAMETERS[LearningHyperParameter.DROPOUT],
             )
-        
-
         # initiliazation to compute the multi spectogram loss
         # a list of powers of two for the window sizes of each MelSpectrogram transform
         multi_spectral_window_powers = cst.MULTI_SPECTRAL_WINDOW_POWERS 
@@ -117,29 +113,28 @@ class RQVAE(nn.Module):
                 hop_length = win_length // 4,
                 n_mels = n_mels,
             ).to(cst.DEVICE)
-
             self.mel_spec_transforms.append(melspec_transform)
             self.mel_spec_recon_alphas.append(alpha)
 
 
     def forward(self, x, is_train, batch_idx):
-        #adding channel dimension
-        #x = rearrange(x, 'b l -> b 1 l')
-        z_e = self.encoder(x)
+        # res1, ..., res5 are the intermediate representations after each conv block in the encoder
+        # we need them to do the skip connections 
+        z_e, res1, res2, res3, res4, res5 = self.encoder(x)
+        # if we are training we reinitialize part of the codebooks every 10 batches
         if batch_idx % 10 == 0 and batch_idx != 0 and is_train:
             self._reinitialize(z_e, batch_idx)
-        # quantize the latent space
+        # compute the quantizations in the latent space
         quantizations, _, comm_loss = self.quantize(z_e, self.num_quantizers, is_train)
         final_z_q = torch.sum(quantizations, dim=0)
         z_q_rearranged = rearrange(final_z_q, '(b l) c -> b l c', b=x.shape[0]).contiguous()
-        recon = self.decoder(z_q_rearranged)
-
+        # decode the quantized representation
+        recon = self.decoder(z_q_rearranged, res1, res2, res3, res4, res5)
         return recon, comm_loss
     
 
     def quantize(self, x, num_quant, is_train):
         first_z_e = rearrange(x, 'b w c -> (b w) c').contiguous()
-        # if it is the first iteration we initialize the codebook with kmeans
         quantizations = []
         list_encodings = []
         self.last_residuals = []
@@ -165,18 +160,17 @@ class RQVAE(nn.Module):
             q_latent_loss += F.mse_loss(z_e.detach(), z_q)      # we train the codebook
             e_latent_loss += F.mse_loss(z_e, z_q.detach())      # we train the encoder
             rq_latent_loss += F.mse_loss(first_z_e, z_d)
-            
             if is_train:
                 # straight-through gradient estimation: we attach z_q to the computational graph
                 # to subsequently pass the gradient unaltered from the decoder to the encoder
                 # whatever the gradients you get for the quantized variable z_q they will just be copy-pasted into z_e
                 z_q = z_e + (z_q - z_e).detach()
-
             # get the residual for the next quantization step
             z_e = z_e - z_q 
             quantizations.append(z_q)
-            
+        # ema update of the codebook frequencies
         self.codebooks_freq *= 0.93
+
         commitment_loss = 0.75*q_latent_loss + e_latent_loss + rq_latent_loss
         stacked_quantizations = torch.stack(quantizations)
         stacked_encodings = torch.stack(list_encodings)
@@ -225,7 +219,5 @@ class RQVAE(nn.Module):
                 # Assign the random elements from z_e to the corresponding weights in the codebook
                 self.codebooks[i_codebook].weight.data[indexes] = self.last_residuals[i_codebook][i, j]
                 self.codebooks_freq[i_codebook][indexes] = 0
-            # reinitialize the frequences dictionary
-            #self.codebooks_freq = torch.zeros(num_quantizers, self.codebook_length, device=cst.DEVICE)
 
 

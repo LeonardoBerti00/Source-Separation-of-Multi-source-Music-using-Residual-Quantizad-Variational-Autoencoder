@@ -73,7 +73,6 @@ class VQVAE(nn.Module):
                 paddings=paddings,
                 dilations=dilations,
                 lstm_layers=config.HYPER_PARAMETERS[LearningHyperParameter.LSTM_LAYERS],
-                batch_size=config.HYPER_PARAMETERS[LearningHyperParameter.BATCH_SIZE],
                 emb_sample_len=emb_sample_len,
                 num_convs=num_convs,
                 dropout=config.HYPER_PARAMETERS[LearningHyperParameter.DROPOUT],
@@ -111,8 +110,6 @@ class VQVAE(nn.Module):
 
 
     def forward(self, x, is_train, batch_idx):
-        #adding channel dimension
-        x = rearrange(x, 'b l-> b 1 l')
         z_e, encoding_indices = self.encode(x)
         
         if batch_idx % 50 == 0 and batch_idx != 0 and is_train:

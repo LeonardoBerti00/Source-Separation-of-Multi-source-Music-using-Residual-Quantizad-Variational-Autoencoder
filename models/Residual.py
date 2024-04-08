@@ -14,8 +14,10 @@ class ResidualBlock(nn.Module):
                                       nn.Conv1d(in_channels, in_channels, kernel_size=1, bias=False),
                                       nn.BatchNorm1d(in_channels),
                                       )
+        self.prelu = nn.PReLU(init=0.1)
     def forward(self, input: Tensor) -> Tensor:
-        return leaky_relu(input + self.resblock(input), inplace=True)
+        #return leaky_relu(input + self.resblock(input), inplace=True)
+        return self.prelu(input + self.resblock(input))
     
 
 class ConvNeXtBlock(nn.Module):

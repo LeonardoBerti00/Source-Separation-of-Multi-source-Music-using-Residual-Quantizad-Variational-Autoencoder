@@ -59,7 +59,6 @@ class VAE(L.LightningModule):
                 paddings=paddings,
                 dilations=dilations,
                 lstm_layers=config.HYPER_PARAMETERS[LearningHyperParameter.LSTM_LAYERS],
-                batch_size=config.HYPER_PARAMETERS[LearningHyperParameter.BATCH_SIZE],
                 emb_sample_len=self.emb_sample_len,
                 num_convs=num_convs,
                 dropout=config.HYPER_PARAMETERS[LearningHyperParameter.DROPOUT],
@@ -97,8 +96,6 @@ class VAE(L.LightningModule):
 
 
     def forward(self, x, is_train, batch_idx):
-        #adding channel dimension
-        x = rearrange(x, 'b l-> b 1 l')
         x = self.encoder(x)
         x = rearrange(x, 'b c l -> b (c l)')
         mean, log_var = self.fc(x).chunk(2, dim=-1)
