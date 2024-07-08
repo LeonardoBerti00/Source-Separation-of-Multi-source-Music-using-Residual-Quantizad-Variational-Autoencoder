@@ -1,6 +1,6 @@
-# Autoregressive Generation and Source Separation of Multi-source Raw Music using Residual Quantization
+# Source Separation of Multi-source Raw Music using Residual Quantization
 
-In this project you can find an implementation of an autoregressive transformer-based generative model, trained with the discrete codes produced by a neural audio codec model based on the residual quantized variational autoencoder  architecture. The model can generate new music and separate audio sources, making a step toward a general audio model. The model is trained on the Slakh dataset. 
+In this project, I developed a neural audio codec model based on the residual quantized variational autoencoder architecture. The model can separate audio sources, achieving almost SoTA results with much less computing power. I train the model on the Slakh2100 dataset, a standard dataset for musical source separation, composed of multi-track audio. You can find an implementation of VQ-VAE, VAE, and RQVAE and also pre-trained pytorch checkpoints. You can also find the implementation and checkpoint of an autoregressive transformer-based generative model, trained with the discrete codes produced by the RQ-VAE.
 
 ## Getting Started
 
@@ -33,7 +33,7 @@ conda activate torch
 ```
 
 ## Usage
-This section of the README walks through how to train and sample from a model. You can decide to train, test or sampling both from the RQ-VAE and the RQTransformer. The first is used to separate sources and the second to generate new music.
+This section of the README walks through how to train and sample from a model. You can decide to train, test or sampling both from the RQ-VAE and the RQTransformer. The first is used to separate sources and the second to generate new audio (as stated in the [report](https://drive.google.com/file/d/1MhF4TGvrAusA-J6D5I6JHzDXWQeIY8FE/view?usp=sharing) the quality of the music generated is very low while the separation quality is decent).
 
 ### Train
 To start the training of the RQ-VAE, go to config.py and set to True config.IS_TRAINING and config.IS_TRAINING_AE and then use the following command:
@@ -77,4 +77,4 @@ Note that at the moment the performance of the RQTransformer are not so good so 
 VQ-VAE and VAE are also implemented. For the VQ-VAE the best test SI-SDRi reached is 6.8866, for VAE is -3.2843. As expected they both underperform with respect of RQ-VAE.
 
 ### Report 
-If you are curious and want to know more details on the tasks, the models architecture and the experiments you can read a short [report](https://drive.google.com/file/d/1-fbV_F0Yo43-3_ZILB10NjSp2UZBfLBF/view?usp=sharing).
+If you are curious and want to know more details on the tasks, the models architecture and the experiments you can read a short [report](https://drive.google.com/file/d/1MhF4TGvrAusA-J6D5I6JHzDXWQeIY8FE/view?usp=sharing).
