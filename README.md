@@ -1,4 +1,4 @@
-# Source Separation of Multi-source Raw Music using Residual Quantization
+# Source Separation of Multi-source Raw Music using a Residual Quantized variational Autoencoder
 
 In this project, I developed a neural audio codec model based on the residual quantized variational autoencoder architecture. The model can separate audio sources, achieving almost SoTA results with much less computing power. I train the model on the Slakh2100 dataset, a standard dataset for musical source separation, composed of multi-track audio. You can find an implementation of VQ-VAE, VAE, and RQVAE and also pre-trained pytorch checkpoints. You can also find the implementation and checkpoint of an autoregressive transformer-based generative model, trained with the discrete codes produced by the RQ-VAE.
 
